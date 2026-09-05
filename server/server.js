@@ -11,6 +11,47 @@ const { seed } = require("./seed");
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// ─── Pre-launch gate ────────────────────────────────────────────────────────
+// While this is being built out, the public site should show nothing but a
+// placeholder. Anyone with the private preview link (this app's URL + the
+// ?key=PREVIEW_KEY query param) unlocks the real site for their browser via
+// a cookie; everyone else — including search crawlers — only ever sees
+// coming-soon.html. API routes are left open (they're meaningless without
+// the frontend, and the preview unlock itself doesn't need them gated).
+const SITE_LOCKED = process.env.SITE_LOCKED !== "false"; // locked by default
+const PREVIEW_KEY = process.env.PREVIEW_KEY || "";
+const PREVIEW_COOKIE = "festiq_preview";
+
+function parseCookies(header) {
+  const out = {};
+  (header || "").split(";").forEach((pair) => {
+    const idx = pair.indexOf("=");
+    if (idx === -1) return;
+    out[pair.slice(0, idx).trim()] = decodeURIComponent(pair.slice(idx + 1).trim());
+  });
+  return out;
+}
+
+app.use((req, res, next) => {
+  res.setHeader("X-Robots-Tag", "noindex, nofollow"); // never index while under wraps (or after, until you ask to)
+  if (!SITE_LOCKED || req.path.startsWith("/api/")) return next();
+
+  const cookies = parseCookies(req.headers.cookie);
+  const keyFromQuery = req.query.key;
+
+  if (PREVIEW_KEY && keyFromQuery === PREVIEW_KEY) {
+    res.setHeader(
+      "Set-Cookie",
+      `${PREVIEW_COOKIE}=${encodeURIComponent(PREVIEW_KEY)}; Max-Age=${60 * 60 * 24 * 90}; Path=/; HttpOnly; SameSite=Lax`
+    );
+    return next();
+  }
+  if (PREVIEW_KEY && cookies[PREVIEW_COOKIE] === PREVIEW_KEY) return next();
+
+  res.status(200).sendFile(path.join(__dirname, "..", "public", "coming-soon.html"));
+});
+
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 const JWT_SECRET = process.env.JWT_SECRET || "festiq-dev-secret-change-me";
