@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FestiQ — Trivia Your Way Into The Lineup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Barlow+Condensed:wght@400;500;600;700;800&display=swap');
+
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+
+  :root{
+    --bg:      #080a10;
+    --bg1:     #10101c;
+    --bg2:     #181828;
+    --border:  rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.14);
+    --green:   #00ffb3;
+    --red:     #ff3355;
+    --gold:    #ffd54f;
+    --blue:    #4da6ff;
+    --purple:  #c084fc;
+    --txt:     #f0eefc;
+    --txt2:    #8a80a8;
+    --txt3:    #423a55;
+    --mono:    'IBM Plex Mono', monospace;
+    --display: 'Barlow Condensed', sans-serif;
+  }
+
+  html{height:100%;}
+  body{
+    height:100%;
+    background:#080a10;
+    background-image:
+      radial-gradient(ellipse 70% 50% at 10% 5%, rgba(192,132,252,0.14) 0%, transparent 55%),
+      radial-gradient(ellipse 50% 40% at 90% 90%, rgba(255,213,79,0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 100% 60% at 50% 40%, rgba(192,132,252,0.05) 0%, transparent 65%);
+    background-attachment:fixed;
+    color:var(--txt);
+    font-family:var(--mono);
+    font-size:13px;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+
+  ::-webkit-scrollbar{width:3px;}
+  ::-webkit-scrollbar-track{background:var(--bg);}
+  ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+
+  @keyframes fadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.25;}}
+  @keyframes shimmer{0%{transform:translateX(-100%);}100%{transform:translateX(200%);}}
+  @keyframes cardIn{from{opacity:0;transform:translateY(20px) scale(0.97);}to{opacity:1;transform:translateY(0) scale(1);}}
+  .fade-up{animation:fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) forwards;}
+
+  .btn{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;border:1px solid var(--border2);background:transparent;color:var(--txt2);padding:9px 18px;cursor:pointer;transition:all .18s;border-radius:3px;}
+  .btn:hover{border-color:var(--txt);color:var(--txt);background:rgba(255,255,255,0.04);transform:translateY(-1px);}
+  .btn-green{border-color:var(--green);color:var(--green);}
+  .btn-green:hover{background:var(--green);color:#000;box-shadow:0 0 20px rgba(0,255,179,0.35);}
+  .btn-gold{border-color:var(--gold);color:var(--gold);}
+  .btn-gold:hover{background:var(--gold);color:#000;box-shadow:0 0 20px rgba(255,213,79,0.35);}
+  .btn-purple{border-color:var(--purple);color:var(--purple);}
+  .btn-purple:hover{background:var(--purple);color:#000;box-shadow:0 0 20px rgba(192,132,252,0.35);}
+  .btn:disabled{opacity:0.35;cursor:not-allowed;transform:none!important;}
+
+  input{font-family:var(--mono);font-size:12px;background:var(--bg2);border:1px solid var(--border2);color:var(--txt);padding:9px 13px;outline:none;transition:border-color .15s,box-shadow .15s;border-radius:3px;width:100%;}
+  input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(77,166,255,0.12);}
+  input::placeholder{color:var(--txt3);}
+
+  .tag{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:3px 9px;border:1px solid;border-radius:20px;}
+  .tag-live{color:var(--green);border-color:var(--green);background:rgba(0,255,179,0.08);}
+  .tag-won{color:var(--gold);border-color:var(--gold);background:rgba(255,213,79,0.08);}
+
+  .header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(8,10,16,0.88);backdrop-filter:blur(8px);z-index:50;}
+  .logo{font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:0.02em;cursor:pointer;}
+  .logo span{background:linear-gradient(90deg,var(--gold),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .wrap{max-width:1040px;margin:0 auto;padding:28px 20px 60px;}
+  .wallet-pill{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;background:var(--bg2);border:1px solid var(--border2);padding:7px 14px;border-radius:20px;color:var(--gold);}
+
+  .hero{text-align:center;margin-bottom:28px;}
+  .hero .eyebrow{font-size:10px;color:var(--purple);letter-spacing:0.16em;font-weight:700;margin-bottom:10px;text-transform:uppercase;}
+  .hero h1{font-family:var(--display);font-size:44px;font-weight:800;line-height:1;margin-bottom:8px;}
+  .hero p{color:var(--txt2);font-size:13px;max-width:560px;margin:0 auto;line-height:1.6;}
+
+  .card{background:var(--bg1);border:1px solid var(--border2);border-radius:8px;}
+
+  .festival-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:24px;}
+  .festival-card{background:var(--bg1);border:1px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:transform .22s cubic-bezier(0.16,1,0.3,1),border-color .15s;}
+  .festival-card:hover{transform:translateY(-4px);border-color:var(--border2);}
+  .festival-banner{height:80px;display:flex;align-items:flex-end;padding:12px 14px;}
+  .festival-body{padding:14px 16px 16px;}
+  .festival-body h3{font-family:var(--display);font-size:19px;font-weight:700;margin-bottom:4px;}
+  .festival-body .meta{font-size:11px;color:var(--txt2);margin-bottom:6px;}
+
+  .stat-tile{flex:1;padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;text-align:center;}
+  .stat-tile .icon{font-size:18px;margin-bottom:4px;}
+  .stat-tile .val{font-family:var(--display);font-size:24px;font-weight:800;line-height:1;}
+  .stat-tile .lbl{font-size:9px;color:var(--txt2);letter-spacing:0.1em;margin-top:4px;text-transform:uppercase;}
+
+  .banner-block{margin-bottom:20px;padding:14px 18px;border-radius:6px;font-size:12px;text-align:center;font-weight:700;}
+  .banner-green{background:rgba(0,255,179,0.08);border:1px solid var(--green);color:var(--green);}
+  .banner-gold{background:rgba(255,213,79,0.1);border:2px solid var(--gold);color:var(--gold);}
+  .banner-red{background:rgba(255,51,85,0.08);border:2px solid var(--red);color:var(--red);}
+
+  .board-grid{display:grid;gap:10px;margin-bottom:16px;}
+  .artist-box{position:relative;aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px;cursor:pointer;transition:border-color .15s,transform .1s,opacity .2s,filter .2s;background:var(--bg1);border:1px solid var(--border2);}
+  .artist-box:hover{transform:translateY(-2px);}
+  .artist-box.cleared{background:rgba(0,255,179,0.1);border-color:var(--green);cursor:default;opacity:0.9;}
+  .artist-box.dead{background:rgba(255,51,85,0.07);border-color:var(--red);cursor:default;opacity:0.55;}
+  .artist-box.inline{box-shadow:0 0 0 1px var(--gold),0 0 14px rgba(255,213,79,0.25);border-color:var(--gold)!important;}
+  .artist-box.dimmed{opacity:0.3;filter:grayscale(0.7);}
+  .artist-box .icon{font-size:18px;margin-bottom:4px;}
+  .artist-box .name{font-family:var(--display);font-size:13px;font-weight:700;line-height:1.2;}
+  .artist-box .genre{font-size:9px;color:var(--txt2);margin-top:3px;}
+  .artist-box .tagline{margin-top:4px;font-size:8.5px;font-weight:700;letter-spacing:0.06em;color:var(--txt2);}
+
+  .demo-block{padding:18px 18px 20px;background:var(--bg1);border:1px solid var(--border2);border-radius:8px;margin-bottom:24px;transition:border-color .3s;}
+  .demo-cell{aspect-ratio:1;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .2s;border:1px solid var(--border2);background:var(--bg2);color:var(--txt2);}
+  .demo-cell.active{border-color:var(--blue);background:rgba(77,166,255,0.15);color:var(--blue);animation:pulse .8s infinite;}
+  .demo-cell.cleared{border-color:var(--green);background:rgba(0,255,179,0.15);color:var(--green);}
+  .demo-cell.dead{border-color:var(--red);background:rgba(255,51,85,0.12);color:var(--red);}
+
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:200;align-items:center;justify-content:center;padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:var(--bg1);border:1px solid var(--border2);border-radius:8px;max-width:460px;width:100%;padding:26px;max-height:88vh;overflow-y:auto;}
+  .modal h3{font-family:var(--display);font-size:22px;font-weight:800;margin-bottom:6px;}
+  .modal p.sub{color:var(--txt2);font-size:12px;margin-bottom:18px;line-height:1.5;}
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:10px;color:var(--txt2);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.08em;}
+  .error-text{color:var(--red);font-size:11px;margin-top:8px;}
+
+  .qmeta{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+  .qtimer{text-align:center;padding:5px 12px;border-radius:5px;flex-shrink:0;}
+  .qtimer .tlbl{font-size:8px;letter-spacing:0.1em;margin-bottom:1px;font-weight:700;}
+  .qtimer .tval{font-family:var(--display);font-size:20px;font-weight:800;line-height:1;}
+  @keyframes tpulse{0%,100%{opacity:1;}50%{opacity:0.35;}}
+  .progress-dots{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;}
+  .pdot{width:9px;height:9px;border-radius:50%;background:var(--border2);}
+  .pdot.correct{background:var(--green);}
+  .pdot.wrong{background:var(--red);}
+  .pdot.current{background:var(--blue);}
+
+  .q-block{border:1px solid var(--border2);background:var(--bg2);padding:16px 18px;margin-bottom:12px;border-radius:5px;transition:border-color .2s;}
+  .q-block.feedback-correct{border-color:var(--green);}
+  .q-block.feedback-wrong{border-color:var(--red);}
+  .q-block .q-eyebrow{font-size:9px;color:var(--txt2);letter-spacing:0.1em;margin-bottom:8px;}
+  .q-block .q-text{font-size:13.5px;line-height:1.5;font-weight:500;margin-bottom:12px;}
+  .choice{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:var(--bg1);border:1px solid var(--border);color:var(--txt2);padding:11px 14px;border-radius:3px;margin-bottom:7px;cursor:pointer;font-size:12px;font-family:var(--mono);transition:all .15s;}
+  .choice:hover:not(:disabled){border-color:var(--border2);}
+  .choice:disabled{cursor:default;}
+  .choice .letter{width:20px;height:20px;border:1px solid var(--border2);border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0;color:var(--txt2);font-weight:700;}
+  .choice.chosen-correct{border-color:var(--green);background:rgba(0,255,179,0.12);color:var(--txt);}
+  .choice.chosen-correct .letter{border-color:var(--green);color:var(--green);}
+  .choice.chosen-wrong{border-color:var(--red);background:rgba(255,51,85,0.1);color:var(--txt);}
+  .choice.chosen-wrong .letter{border-color:var(--red);color:var(--red);}
+  .choice.dimmed{opacity:0.5;}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg2);border:1px solid var(--border2);padding:12px 20px;border-radius:6px;font-size:12px;z-index:300;display:none;max-width:90vw;text-align:center;}
+  .footer-note{margin-top:50px;text-align:center;color:var(--txt3);font-size:10.5px;letter-spacing:0.02em;}
+  .empty{text-align:center;color:var(--txt3);padding:50px 20px;font-size:12px;}
+  .backlink{font-size:11px;color:var(--txt2);text-decoration:none;letter-spacing:0.04em;}
+  .backlink:hover{color:var(--txt);}
+
+  @media (max-width:600px){
+    .hero h1{font-size:32px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo" onclick="navigate('#/')">FESTI<span>Q</span></div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div id="wallet-pill" class="wallet-pill" style="display:none;">🎟️ <span id="wallet-tokens">0</span> TOKENS</div>
+    <button class="btn" id="auth-btn" onclick="openAuthModal()">LOG IN</button>
+  </div>
+</div>
+
+<div id="app" class="wrap"></div>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="auth-modal">
+  <div class="modal">
+    <h3 id="auth-title">Log In</h3>
+    <p class="sub">One account works across every festival room.</p>
+    <div class="field" id="name-field" style="display:none;">
+      <label>Display Name</label>
+      <input type="text" id="auth-name" placeholder="Alex">
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="auth-email" placeholder="you@example.com">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="auth-password" placeholder="••••••••">
+    </div>
+    <div id="auth-error" class="error-text" style="display:none;"></div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-purple" style="flex:1;" onclick="submitAuth()" id="auth-submit-btn">LOG IN</button>
+      <button class="btn" onclick="closeModal('auth-modal')">CANCEL</button>
+    </div>
+    <p style="margin-top:16px;font-size:11px;color:var(--txt2);text-align:center;">
+      <span id="auth-toggle-text">Don't have an account?</span>
+      <a href="#" onclick="toggleAuthMode();return false;" style="color:var(--gold);text-decoration:none;font-weight:700;" id="auth-toggle-link">Sign up</a>
+    </p>
+  </div>
+</div>
+
+<!-- QUIZ MODAL -->
+<div class="modal-overlay" id="quiz-modal">
+  <div class="modal" id="quiz-modal-body"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = window.location.origin;
+let token = localStorage.getItem('festiq_token') || null;
+let user = JSON.parse(localStorage.getItem('festiq_user') || 'null');
+let authMode = 'login';
+let currentFestival = null;
+let currentAttempt = null;
+
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 3400);
+}
+
+function authHeaders(){ return token ? { 'Authorization': 'Bearer ' + token } : {}; }
+
+function updateAuthUI(){
+  const btn = document.getElementById('auth-btn');
+  const pill = document.getElementById('wallet-pill');
+  if (user) {
+    btn.textContent = user.display_name.toUpperCase() + ' — LOG OUT';
+    btn.onclick = logout;
+    pill.style.display = 'flex';
+    refreshWallet();
+  } else {
+    btn.textContent = 'LOG IN';
+    btn.onclick = openAuthModal;
+    pill.style.display = 'none';
+  }
+}
+
+function refreshWallet(){
+  if (!token) return;
+  fetch(`${API}/api/wallet`, { headers: authHeaders() }).then(r => r.json()).then(d => {
+    if (d.tokens !== undefined) document.getElementById('wallet-tokens').textContent = d.tokens;
+  });
+}
+
+function claimFreeToken(){
+  fetch(`${API}/api/wallet/claim-free`, { method: 'POST', headers: authHeaders() })
+    .then(r => r.json()).then(d => {
+      if (d.error) { toast(d.retry_after_ms ? 'Come back later for your next free token' : d.error); return; }
+      toast('+1 free token claimed!');
+      refreshWallet();
+    });
+}
+
+function demoBuyTokens(qty){
+  fetch(`${API}/api/wallet/demo-buy-tokens`, { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ quantity: qty }) })
+    .then(r => r.json()).then(d => {
+      toast(`+${qty} tokens added (demo — no real charge)`);
+      refreshWallet();
+    });
+}
+
+function openAuthModal(){ document.getElementById('auth-modal').classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function toggleAuthMode(){
+  authMode = authMode === 'login' ? 'register' : 'login';
+  document.getElementById('auth-title').textContent = authMode === 'login' ? 'Log In' : 'Sign Up';
+  document.getElementById('auth-submit-btn').textContent = authMode === 'login' ? 'LOG IN' : 'SIGN UP';
+  document.getElementById('name-field').style.display = authMode === 'register' ? 'block' : 'none';
+  document.getElementById('auth-toggle-text').textContent = authMode === 'login' ? "Don't have an account?" : 'Already have an account?';
+  document.getElementById('auth-toggle-link').textContent = authMode === 'login' ? 'Sign up' : 'Log in';
+}
+
+function submitAuth(){
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const display_name = document.getElementById('auth-name').value.trim();
+  const errEl = document.getElementById('auth-error');
+  errEl.style.display = 'none';
+  const path = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+  const body = authMode === 'login' ? { email, password } : { email, password, display_name };
+  fetch(`${API}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    .then(r => r.json()).then(d => {
+      if (d.error) { errEl.textContent = d.error; errEl.style.display = 'block'; return; }
+      token = d.token; user = d.user;
+      localStorage.setItem('festiq_token', token);
+      localStorage.setItem('festiq_user', JSON.stringify(user));
+      closeModal('auth-modal');
+      updateAuthUI();
+      render();
+    });
+}
+
+function logout(){
+  token = null; user = null;
+  localStorage.removeItem('festiq_token'); localStorage.removeItem('festiq_user');
+  updateAuthUI(); navigate('#/');
+}
+
+// ─── Routing ────────────────────────────────────────────────────────────────
+
+function navigate(hash){ window.location.hash = hash; }
+window.addEventListener('hashchange', render);
+
+function render(){
+  const hash = window.location.hash || '#/';
+  if (hash.startsWith('#/f/')) renderFestival(hash.slice(4));
+  else renderList();
+}
+
+// ─── Animated "how it works" demo board (mirrors PropQuix's guest demo) ─────
+
+const DEMO_ICONS = ["🎤","🎧","🥁","🎸","🎹","🎺","🕺","🎷","🎻"];
+let demoTimeouts = [];
+function clearDemoTimers(){ demoTimeouts.forEach(clearTimeout); demoTimeouts = []; }
+function demoSchedule(fn, delay){ const id = setTimeout(fn, delay); demoTimeouts.push(id); }
+
+function runDemo(){
+  clearDemoTimers();
+  const gridEl = document.getElementById('demo-grid');
+  const capEl = document.getElementById('demo-caption');
+  if (!gridEl) return; // navigated away
+
+  const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  const state = Array(9).fill('locked');
+
+  const setState = (i, s) => { state[i] = s; renderDemoGrid(); };
+  const renderDemoGrid = () => {
+    gridEl.innerHTML = state.map((s, i) => `
+      <div class="demo-cell ${s}">${s === 'cleared' ? '✓' : s === 'dead' ? '💀' : DEMO_ICONS[i]}</div>
+    `).join('');
+  };
+  renderDemoGrid();
+
+  const bust = Math.random() < 0.3;
+  let t = 500;
+
+  if (bust) {
+    capEl.textContent = 'A rough run — squares are starting to die off…';
+    const bustSet = [0,1,3,7,8];
+    bustSet.forEach((idx, i) => {
+      demoSchedule(() => { setState(idx, 'active'); }, t); t += 450;
+      demoSchedule(() => {
+        setState(idx, 'dead');
+        capEl.textContent = i < bustSet.length - 1 ? '💀 Wrong answer — that artist is dead for this board…' : '💀 That was the last line…';
+      }, t); t += 550;
+    });
+    demoSchedule(() => { capEl.textContent = '💥 BUSTED — no line is possible anymore. Board over.'; }, t); t += 2400;
+    demoSchedule(runDemo, t);
+    return;
+  }
+
+  const pattern = lines[Math.floor(Math.random() * lines.length)];
+  const distractor = [0,1,2,3,4,5,6,7,8].find(i => !pattern.includes(i));
+  capEl.textContent = 'Pick any artist square to answer their trivia…';
+
+  demoSchedule(() => { setState(distractor, 'active'); capEl.textContent = 'Attempting an artist quiz…'; }, t); t += 650;
+  demoSchedule(() => { setState(distractor, 'dead'); capEl.textContent = "💀 Didn't clear it — dead for this board, no retry."; }, t); t += 1000;
+
+  pattern.forEach((idx, i) => {
+    demoSchedule(() => { setState(idx, 'active'); capEl.textContent = i === 0 ? 'Clearing a line…' : 'Keep going…'; }, t); t += 700;
+    demoSchedule(() => { setState(idx, 'cleared'); capEl.textContent = '✅ Artist cleared!'; }, t); t += 800;
+  });
+
+  demoSchedule(() => { capEl.textContent = '🎉 Line complete! Ticket won!'; }, t); t += 2600;
+  demoSchedule(runDemo, t);
+}
+
+function renderDemo(){
+  return `
+    <div class="demo-block" id="demo-block">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:6px;">
+        <div style="font-size:10px;color:var(--txt2);letter-spacing:0.12em;font-weight:700;text-transform:uppercase;">🎮 See how it works</div>
+        <div style="font-size:10px;color:var(--txt2);letter-spacing:0.06em;">DEMO — not a real board</div>
+      </div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;justify-content:center;">
+        <div class="board-grid" id="demo-grid" style="grid-template-columns:repeat(3,1fr);width:150px;flex-shrink:0;"></div>
+        <div style="flex:1;min-width:200px;">
+          <div id="demo-caption" style="font-size:12.5px;font-weight:600;color:var(--txt);margin-bottom:6px;min-height:18px;">Watch how the board plays…</div>
+          <div style="font-size:11px;color:var(--txt2);line-height:1.6;">Each square is one artist's trivia, one shot only. Complete any row, column, or diagonal of cleared artists and you win a ticket. Miss enough squares that no line is left possible, and that board's done.</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderList(){
+  clearDemoTimers();
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="hero">
+      <div class="eyebrow">Play Anytime · Festival Trivia</div>
+      <h1>WIN A <span style="color:var(--gold);">TICKET</span> TO THE SHOW</h1>
+      <p>Pick a festival, pick an artist on the lineup, answer their trivia. Land a full row, column, or diagonal and you win a ticket — no luck of the draw, just knowing the lineup.</p>
+    </div>
+    ${renderDemo()}
+    <div class="festival-grid" id="festival-grid"><div class="empty">Loading festivals…</div></div>
+    <div class="footer-note">FestiQ — a prototype. Real ticket sourcing &amp; payments not wired up yet.</div>
+  `;
+  runDemo();
+  fetch(`${API}/api/festivals`).then(r => r.json()).then(list => {
+    const grid = document.getElementById('festival-grid');
+    if (!list.length) { grid.innerHTML = '<div class="empty">No festivals live yet.</div>'; return; }
+    grid.innerHTML = list.map(f => `
+      <div class="festival-card" onclick="navigate('#/f/${f.slug}')">
+        <div class="festival-banner" style="background:linear-gradient(135deg, ${f.banner_color}, #10101c);">
+          <span class="tag ${f.tickets_awarded >= f.tickets_available ? 'tag-won' : 'tag-live'}">
+            ${f.tickets_awarded >= f.tickets_available ? 'Ticket Claimed' : 'Live'}
+          </span>
+        </div>
+        <div class="festival-body">
+          <h3>${f.name}</h3>
+          <div class="meta">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
+          <div class="meta">${f.lineup_count} artists on the board · $${(f.token_price_usd_cents/100).toFixed(0)}/try</div>
+          <div class="meta" style="color:var(--gold);font-weight:700;">🎁 ${f.ticket_prize_label}</div>
+        </div>
+      </div>
+    `).join('');
+  });
+}
+
+function renderFestival(slug){
+  clearDemoTimers();
+  const app = document.getElementById('app');
+  app.innerHTML = '<div class="empty">Loading…</div>';
+  fetch(`${API}/api/festivals/${slug}`, { headers: authHeaders() }).then(r => r.json()).then(f => {
+    if (f.error) { app.innerHTML = `<div class="empty">${f.error}</div>`; return; }
+    currentFestival = f;
+    const cells = f.board ? f.board.cells : f.artists.map(a => ({ ...a, artist_id: a.id, status: 'available' }));
+    const wonTicket = f.board && f.board.won_ticket;
+    const clearedCount = cells.filter(c => c.status === 'cleared').length;
+
+    app.innerHTML = `
+      <a href="#/" class="backlink">← ALL FESTIVALS</a>
+      <div style="text-align:center;margin:18px 0 20px;">
+        <div class="eyebrow" style="font-size:10px;color:var(--gold);letter-spacing:0.14em;font-weight:700;margin-bottom:8px;text-transform:uppercase;">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
+        <div style="font-family:var(--display);font-size:36px;font-weight:800;line-height:1;margin-bottom:8px;">${f.name}</div>
+        <div style="font-size:12.5px;color:var(--txt2);max-width:520px;margin:0 auto;">Clear any row, column, or diagonal of artist trivia to win ${f.ticket_prize_label}. One shot per artist — hard on purpose.</div>
+      </div>
+
+      ${wonTicket ? `<div class="banner-block banner-gold">🎉 You already won a ticket to this festival! Claim code: ${wonTicket.claim_code || ''}</div>` : ''}
+
+      <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+        <div class="stat-tile"><div class="icon">🎟️</div><div class="val" style="color:var(--gold);" id="wallet-stat">${user ? '—' : '—'}</div><div class="lbl">Tokens</div></div>
+        <div class="stat-tile"><div class="icon">✅</div><div class="val" style="color:var(--green);">${clearedCount}/${cells.length}</div><div class="lbl">Cleared</div></div>
+        <div class="stat-tile"><div class="icon">💵</div><div class="val">$${(f.token_price_usd_cents/100).toFixed(0)}</div><div class="lbl">Per Try</div></div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
+        ${user ? `<button class="btn btn-gold" style="flex:1;min-width:180px;" onclick="claimFreeToken()">🎁 CLAIM FREE TOKEN</button>
+                  <button class="btn btn-purple" style="flex:1;min-width:180px;" onclick="demoBuyTokens(5)">+5 TOKENS ($${((f.token_price_usd_cents*5)/100).toFixed(0)} DEMO)</button>`
+               : `<button class="btn btn-purple" style="flex:1;" onclick="openAuthModal()">LOG IN TO PLAY →</button>`}
+      </div>
+
+      <div style="font-size:11px;color:var(--txt2);letter-spacing:0.1em;font-weight:600;margin-bottom:12px;text-transform:uppercase;">
+        The board — ${f.entry_cost_tokens} token per artist, one shot each
+      </div>
+      <div class="board-grid" id="board-grid" style="grid-template-columns:repeat(${f.grid_size},1fr);"></div>
+      <div class="footer-note">Entry costs ${f.entry_cost_tokens} token (~$${(f.token_price_usd_cents/100).toFixed(0)}) per artist attempt. Fail and that artist is dead for this board — no retries.</div>
+    `;
+
+    refreshWallet();
+    // wallet pill already updates the header; mirror it into the stat tile too
+    if (token) {
+      fetch(`${API}/api/wallet`, { headers: authHeaders() }).then(r => r.json()).then(d => {
+        const el = document.getElementById('wallet-stat');
+        if (el && d.tokens !== undefined) el.textContent = d.tokens;
+      });
+    }
+
+    renderBoardGrid(cells, f.grid_size);
+  });
+}
+
+function renderBoardGrid(cells, gridSize){
+  const grid = document.getElementById('board-grid');
+  const sorted = [...cells].sort((a,b) => a.position - b.position);
+  grid.innerHTML = sorted.map(c => `
+    <div class="artist-box ${c.status}" data-pos="${c.position}"
+         onmouseenter="hoverLine(${c.position}, ${gridSize})" onmouseleave="clearHoverLine()"
+         onclick="handleBoxClick(${c.artist_id}, '${c.status}')">
+      <div class="icon">${c.status === 'cleared' ? '✅' : c.status === 'dead' ? '💀' : '🎤'}</div>
+      <div class="name">${c.name}</div>
+      <div class="genre">${c.genre || ''}</div>
+      <div class="tagline">${c.status === 'cleared' ? 'CLEARED' : c.status === 'dead' ? 'DEAD' : 'PLAY →'}</div>
+    </div>
+  `).join('');
+}
+
+// Hover a cell → highlight its full row/column (mirrors PropQuix's board hover)
+function hoverLine(pos, gridSize){
+  const row = Math.floor(pos / gridSize), col = pos % gridSize;
+  document.querySelectorAll('#board-grid .artist-box').forEach(el => {
+    const p = parseInt(el.dataset.pos, 10);
+    const r = Math.floor(p / gridSize), c = p % gridSize;
+    const inLine = r === row || c === col;
+    el.classList.toggle('inline', inLine);
+    el.classList.toggle('dimmed', !inLine);
+  });
+}
+function clearHoverLine(){
+  document.querySelectorAll('#board-grid .artist-box').forEach(el => {
+    el.classList.remove('inline', 'dimmed');
+  });
+}
+
+function handleBoxClick(artistId, status){
+  if (!user) { openAuthModal(); return; }
+  if (status !== 'available') return;
+  if (currentFestival.board && currentFestival.board.won_ticket) { toast('You already won a ticket to this festival!'); return; }
+  fetch(`${API}/api/festivals/${currentFestival.slug}/start`, {
+    method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ artist_id: artistId })
+  }).then(r => r.json()).then(d => {
+    if (d.error) { toast(d.error); return; }
+    currentAttempt = {
+      id: d.attempt_id, questions: d.questions, artist: d.artist, level: d.level,
+      passThreshold: d.pass_threshold, current: 0, results: Array(d.questions.length).fill(null),
+      answering: false, feedback: null, timer: null,
+      timeLeft: d.questions.length * (d.level?.secondsPerQuestion || 15),
+    };
+    refreshWallet();
+    openQuiz();
+    startQuizTimer();
+  });
+}
+
+function startQuizTimer(){
+  clearInterval(currentAttempt.timer);
+  currentAttempt.timer = setInterval(() => {
+    const a = currentAttempt;
+    if (!a) return;
+    a.timeLeft -= 1;
+    if (a.timeLeft <= 0) {
+      a.timeLeft = 0;
+      clearInterval(a.timer);
+      renderTimer();
+      submitQuiz();
+      return;
+    }
+    renderTimer();
+  }, 1000);
+}
+
+function renderTimer(){
+  const el = document.getElementById('qtimer-val');
+  if (!el || !currentAttempt) return;
+  const t = currentAttempt.timeLeft;
+  const mm = String(Math.floor(t / 60)).padStart(2, '0');
+  const ss = String(t % 60).padStart(2, '0');
+  const color = t <= 20 ? 'var(--red)' : t <= 60 ? 'var(--gold)' : 'var(--green)';
+  el.style.color = color;
+  el.textContent = `${mm}:${ss}`;
+  el.style.animation = t <= 15 ? 'tpulse 0.8s infinite' : 'none';
+  const box = document.getElementById('qtimer-box');
+  if (box) { box.style.background = `${color}15`; box.style.borderColor = `${color}44`; }
+  const lbl = document.getElementById('qtimer-lbl');
+  if (lbl) lbl.style.color = color;
+}
+
+function openQuiz(){
+  const d = currentAttempt;
+  const body = document.getElementById('quiz-modal-body');
+  body.innerHTML = `
+    <div class="qmeta">
+      <div>
+        <div style="font-size:10px;color:var(--txt2);letter-spacing:0.1em;">${d.artist.genre ? d.artist.genre.toUpperCase() : ''} · ${d.artist.name.toUpperCase()}</div>
+        <div style="font-size:11px;color:var(--txt2);margin-top:2px;">Question <span id="qcurrent">1</span> of ${d.questions.length} · need ${d.passThreshold}/${d.questions.length} correct to clear
+          ${typeof d.level?.estPassRatePct === 'number' ? ` · 📊 ~${d.level.estPassRatePct}% modeled pass rate — one shot, hard on purpose` : ''}</div>
+      </div>
+      <div class="qtimer" id="qtimer-box" style="border:1px solid var(--border2);">
+        <div class="tlbl" id="qtimer-lbl" style="color:var(--green);">TIME LEFT</div>
+        <div class="tval" id="qtimer-val" style="color:var(--green);"></div>
+      </div>
+    </div>
+    <div class="progress-dots" id="qdots"></div>
+    <div id="quiz-questions"></div>
+    <div style="display:flex;gap:10px;margin-top:6px;justify-content:center;">
+      <button class="btn" onclick="submitQuiz()">SUBMIT QUIZ NOW →</button>
+    </div>
+  `;
+  renderTimer();
+  renderQuizDots();
+  renderCurrentQuestion();
+  document.getElementById('quiz-modal').classList.add('open');
+}
+
+function renderQuizDots(){
+  const el = document.getElementById('qdots');
+  if (!el || !currentAttempt) return;
+  const a = currentAttempt;
+  el.innerHTML = a.results.map((r, i) => {
+    const cls = r === 'correct' ? 'correct' : r === 'wrong' ? 'wrong' : i === a.current ? 'current' : '';
+    return `<div class="pdot ${cls}"></div>`;
+  }).join('');
+}
+
+function renderCurrentQuestion(){
+  const a = currentAttempt;
+  const i = a.current;
+  const q = a.questions[i];
+  const qEl = document.getElementById('quiz-questions');
+  const curEl = document.getElementById('qcurrent');
+  if (curEl) curEl.textContent = i + 1;
+  qEl.innerHTML = `
+    <div class="q-block" id="qblock">
+      <div class="q-eyebrow">QUESTION ${i+1} OF ${a.questions.length}</div>
+      <div class="q-text">${q.question}</div>
+      ${q.choices.map((choice, ci) => `
+        <button class="choice" id="choice-${ci}" onclick="answerChoice(${ci})">
+          <span class="letter">${String.fromCharCode(65+ci)}</span>${choice}
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+function answerChoice(choiceIndex){
+  const a = currentAttempt;
+  if (a.answering || a.feedback) return;
+  a.answering = true;
+  const qIndex = a.current;
+  fetch(`${API}/api/festivals/${currentFestival.slug}/answer`, {
+    method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ attempt_id: a.id, question_index: qIndex, choice_index: choiceIndex })
+  }).then(r => r.json()).then(d => {
+    a.answering = false;
+    if (d.error) { toast(d.error); return; }
+    a.results[qIndex] = d.correct ? 'correct' : 'wrong';
+    a.feedback = { correct: d.correct, chosen: choiceIndex };
+    renderQuizDots();
+
+    const block = document.getElementById('qblock');
+    if (block) block.classList.add(d.correct ? 'feedback-correct' : 'feedback-wrong');
+    document.querySelectorAll('#quiz-questions .choice').forEach((el, ci) => {
+      el.disabled = true;
+      if (ci === choiceIndex) el.classList.add(d.correct ? 'chosen-correct' : 'chosen-wrong');
+      else el.classList.add('dimmed');
+    });
+
+    setTimeout(() => {
+      a.feedback = null;
+      const next = a.current + 1;
+      if (next >= a.questions.length) { submitQuiz(); return; }
+      a.current = next;
+      renderQuizDots();
+      renderCurrentQuestion();
+    }, 900);
+  }).catch(() => { a.answering = false; toast('Network hiccup — tap an answer again.'); });
+}
+
+function submitQuiz(){
+  const a = currentAttempt;
+  if (!a || a.submitting) return;
+  a.submitting = true;
+  clearInterval(a.timer);
+  fetch(`${API}/api/festivals/${currentFestival.slug}/submit`, {
+    method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ attempt_id: a.id })
+  }).then(r => r.json()).then(d => {
+    if (d.error) { toast(d.error); closeModal('quiz-modal'); return; }
+    closeModal('quiz-modal');
+    if (d.ticket_won) {
+      toast(`🎉 LINE COMPLETE! You won: ${d.ticket_won.prize} — claim code ${d.ticket_won.claim_code}`);
+    } else if (d.passed) {
+      toast(`✅ Correct — ${d.artist.name} cleared! (${d.correct_count}/${d.total})`);
+    } else if (d.busted) {
+      toast(`💥 ${d.artist.name} not cleared (${d.correct_count}/${d.total}) — and no line is possible anymore. Board over.`);
+    } else {
+      toast(`❌ ${d.artist.name} is dead for this board (${d.correct_count}/${d.total}, needed ${d.pass_threshold})`);
+    }
+    renderFestival(currentFestival.slug);
+  });
+}
+
+updateAuthUI();
+render();
+</script>
+</body>
+</html>
