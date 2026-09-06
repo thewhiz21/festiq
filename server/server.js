@@ -288,8 +288,18 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
     const wallet = await getOrCreateWallet(req.user.id);
     if (wallet.tokens < festival.entry_cost_tokens) return res.status(402).json({ error: "Not enough tokens — buy more or claim your free daily token" });
 
-    const { rows: questions } = await pool.query(`SELECT * FROM questions WHERE artist_id = $1`, [artist.id]);
-    if (!questions.length) return res.status(500).json({ error: "No questions available for this artist yet" });
+    const { rows: allQuestions } = await pool.query(`SELECT * FROM questions WHERE artist_id = $1`, [artist.id]);
+    if (!allQuestions.length) return res.status(500).json({ error: "No questions available for this artist yet" });
+
+    // Shuffle question order too, then cap at QUESTIONS_PER_QUIZ — keeps every
+    // quiz the same short length even if an artist's bank grows past 7.
+    const QUESTIONS_PER_QUIZ = 7;
+    const shuffledQuestionOrder = [...allQuestions];
+    for (let i = shuffledQuestionOrder.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledQuestionOrder[i], shuffledQuestionOrder[j]] = [shuffledQuestionOrder[j], shuffledQuestionOrder[i]];
+    }
+    const questions = shuffledQuestionOrder.slice(0, QUESTIONS_PER_QUIZ);
 
     // Shuffle choice order per question so the correct answer isn't always "A".
     const shuffled = questions.map((q) => {
@@ -309,15 +319,17 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
     // Deduct the token only after everything above succeeded.
     await pool.query(`UPDATE wallets SET tokens = tokens - $1 WHERE user_id = $2`, [festival.entry_cost_tokens, req.user.id]);
 
-    const passThreshold = Math.ceil(shuffled.length * 0.67);
-    // Difficulty drives the per-question clock and the flavor "modeled pass rate"
-    // text, same shape as PropQuix Solo's box-level tiers.
+    // Short (7-question) rounds with a difficulty-tuned pass bar: easy needs a
+    // perfect score, medium/hard ease the bar slightly to offset genuinely
+    // harder questions — same idea as PropQuix Solo's per-box tiers, just
+    // mapped onto artist difficulty instead of board position.
     const DIFFICULTY_LEVEL = {
-      easy: { secondsPerQuestion: 20, estPassRatePct: 70 },
-      medium: { secondsPerQuestion: 16, estPassRatePct: 50 },
-      hard: { secondsPerQuestion: 12, estPassRatePct: 30 },
+      easy: { secondsPerQuestion: 20, estPassRatePct: 55, passThreshold: 7 },
+      medium: { secondsPerQuestion: 16, estPassRatePct: 40, passThreshold: 6 },
+      hard: { secondsPerQuestion: 12, estPassRatePct: 22, passThreshold: 5 },
     };
     const level = DIFFICULTY_LEVEL[artist.difficulty] || DIFFICULTY_LEVEL.medium;
+    const passThreshold = Math.min(level.passThreshold, shuffled.length);
     const inserted = await pool.query(
       `INSERT INTO pending_attempts (user_id, festival_id, artist_id, questions_json) VALUES ($1, $2, $3, $4) RETURNING id`,
       [req.user.id, festival.id, artist.id, JSON.stringify({ items: shuffled, passThreshold })]
