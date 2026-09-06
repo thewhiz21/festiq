@@ -7,7 +7,33 @@
 const { pool } = require("./db");
 const { gridSizeForArtistCount } = require("./board");
 
+// Fictional "coming soon" festivals — lineup TBA, not playable yet. Just
+// enough to show on the lobby with an "Upcoming" tag until the real lineup
+// (and its trivia question bank) is ready to seed.
+const UPCOMING_FESTIVALS = [
+  { slug: "amber-fields-2026", name: "Amber Fields Festival", location: "Prescott Valley, AZ", event_date: "2026-11-14", banner_color: "#ff9d3d" },
+  { slug: "north-static-2027", name: "North Static Festival", location: "Duluth, MN", event_date: "2027-01-23", banner_color: "#4da6ff" },
+  { slug: "glasshouse-2027", name: "Glasshouse Festival", location: "Asheville, NC", event_date: "2027-03-06", banner_color: "#c084fc" },
+];
+
 async function seed() {
+  // Idempotent upgrade for boards already seeded before the 2-ticket tier
+  // model existed — bump the ticket supply so a 2nd line is actually
+  // claimable, without touching anything else about the festival row.
+  await pool.query(
+    `UPDATE festivals SET tickets_available = 2 WHERE slug = 'sunset-waves-2026' AND tickets_available < 2`
+  );
+
+  for (const f of UPCOMING_FESTIVALS) {
+    const { rows } = await pool.query(`SELECT id FROM festivals WHERE slug = $1`, [f.slug]);
+    if (rows.length) continue;
+    await pool.query(
+      `INSERT INTO festivals (slug, name, location, event_date, banner_color, entry_cost_tokens, token_price_usd_cents, ticket_prize_label, status, tickets_available)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'upcoming', $9)`,
+      [f.slug, f.name, f.location, f.event_date, f.banner_color, 3, 1000, "Tickets TBA", 0]
+    );
+  }
+
   const existing = await pool.query(`SELECT id FROM festivals WHERE slug = $1`, ["sunset-waves-2026"]);
   if (existing.rows.length) {
     console.log("Demo festival already seeded — skipping.");
@@ -17,7 +43,7 @@ async function seed() {
   const festivalResult = await pool.query(
     `INSERT INTO festivals (slug, name, location, event_date, banner_color, entry_cost_tokens, token_price_usd_cents, ticket_prize_label, tickets_available)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name`,
-    ["sunset-waves-2026", "Sunset Waves Festival", "Marina Bluffs, CA", "2026-10-17", "#ff3d81", 1, 1000, "1 General Admission Weekend Pass", 1]
+    ["sunset-waves-2026", "Sunset Waves Festival", "Marina Bluffs, CA", "2026-10-17", "#ff3d81", 1, 1000, "1 General Admission Weekend Pass", 2]
   );
   const festivalId = festivalResult.rows[0].id;
   const festivalName = festivalResult.rows[0].name;

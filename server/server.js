@@ -5,7 +5,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { pool, initSchema } = require("./db");
-const { gridSizeForArtistCount, evaluateBoard } = require("./board");
+const { gridSizeForArtistCount, evaluateBoard, MAX_TIERS } = require("./board");
 const { seed } = require("./seed");
 
 const app = express();
@@ -97,11 +97,13 @@ async function getOrCreateBoard(userId, festival) {
   return { board, cells };
 }
 
-function boardPayload(festival, artists, cells, gridSize, wonTicket) {
+function boardPayload(festival, artists, cells, gridSize, wonTicket, linesCompleted) {
   const cellByArtist = Object.fromEntries(cells.map((c) => [c.artist_id, c.status]));
   return {
     grid_size: gridSize,
     won_ticket: !!wonTicket,
+    lines_completed: linesCompleted || 0,
+    max_tiers: MAX_TIERS,
     cells: artists.map((a) => ({
       artist_id: a.id,
       name: a.name,
@@ -187,11 +189,11 @@ app.get("/api/festivals/:slug", async (req, res) => {
 
     let board = null;
     const header = req.headers.authorization;
-    if (header && header.startsWith("Bearer ")) {
+    if (festival.status === "live" && header && header.startsWith("Bearer ")) {
       try {
         const decoded = jwt.verify(header.split(" ")[1], JWT_SECRET);
         const { board: b, cells } = await getOrCreateBoard(decoded.id, festival);
-        board = boardPayload(festival, artists, cells, gridSize, b.won_ticket);
+        board = boardPayload(festival, artists, cells, gridSize, b.won_ticket, b.lines_completed);
       } catch {
         /* not logged in / bad token — just omit board */
       }
@@ -278,7 +280,12 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
     if (!artist) return res.status(404).json({ error: "Artist not found in this lineup" });
 
     const { board, cells } = await getOrCreateBoard(req.user.id, festival);
-    if (board.won_ticket) return res.status(400).json({ error: "You've already won a ticket to this festival" });
+    const { rows: allArtistsForBoard } = await pool.query(`SELECT * FROM artists WHERE festival_id = $1 ORDER BY position ASC`, [festival.id]);
+    const boardGridSize = gridSizeForArtistCount(allArtistsForBoard.length);
+    const cellsByPositionNow = allArtistsForBoard.map((a) => cells.find((c) => c.artist_id === a.id));
+    const state = evaluateBoard(cellsByPositionNow, boardGridSize);
+    const boardDone = state.busted || state.completedLines >= MAX_TIERS || (state.completedLines >= 1 && !state.nextLineReachable);
+    if (boardDone) return res.status(400).json({ error: state.completedLines >= 1 ? "This board is done — no further lines are reachable" : "This board is busted — no line was still possible" });
     const cell = cells.find((c) => c.artist_id === artist.id);
     if (!cell || cell.status !== "available") return res.status(409).json({ error: "This artist square is no longer available" });
 
@@ -421,16 +428,25 @@ app.post("/api/festivals/:slug/submit", requireAuth, async (req, res) => {
     const gridSize = gridSizeForArtistCount(artists.length);
     const { rows: freshCells } = await pool.query(`SELECT * FROM board_cells WHERE board_id = $1`, [board.id]);
     const cellsByPosition = artists.map((a) => freshCells.find((c) => c.artist_id === a.id));
-    const { hasCompletedLine, busted } = evaluateBoard(cellsByPosition, gridSize);
+    const { completedLines, nextLineReachable, busted } = evaluateBoard(cellsByPosition, gridSize);
 
-    let ticketWon = null;
-    const justCompletedLine = hasCompletedLine && !board.won_ticket;
-    if (justCompletedLine && festival.tickets_awarded < festival.tickets_available) {
+    // Award one ticket per newly-completed line beyond what this board
+    // already had credit for — 1 line = 1 ticket, 2 lines = 2 tickets,
+    // capped at MAX_TIERS and at the festival's remaining ticket supply.
+    const previousLines = board.lines_completed || 0;
+    const newLines = Math.max(0, completedLines - previousLines);
+    const ticketsWon = [];
+    for (let i = 0; i < newLines; i++) {
+      if (festival.tickets_awarded + ticketsWon.length >= festival.tickets_available) break;
       const claimCode = "FQ-" + crypto.randomBytes(4).toString("hex").toUpperCase();
       await pool.query(`INSERT INTO tickets_won (user_id, festival_id, claim_code) VALUES ($1, $2, $3)`, [req.user.id, festival.id, claimCode]);
-      await pool.query(`UPDATE boards SET won_ticket = TRUE WHERE id = $1`, [board.id]);
-      await pool.query(`UPDATE festivals SET tickets_awarded = tickets_awarded + 1 WHERE id = $1`, [festival.id]);
-      ticketWon = { claim_code: claimCode, prize: festival.ticket_prize_label };
+      ticketsWon.push({ claim_code: claimCode, prize: festival.ticket_prize_label });
+    }
+    if (ticketsWon.length) {
+      await pool.query(`UPDATE festivals SET tickets_awarded = tickets_awarded + $1 WHERE id = $2`, [ticketsWon.length, festival.id]);
+    }
+    if (completedLines > previousLines) {
+      await pool.query(`UPDATE boards SET lines_completed = $1, won_ticket = TRUE WHERE id = $2`, [completedLines, board.id]);
     }
 
     res.json({
@@ -440,10 +456,13 @@ app.post("/api/festivals/:slug/submit", requireAuth, async (req, res) => {
       passed,
       breakdown,
       artist: { id: artist.id, name: artist.name },
-      just_completed_line: justCompletedLine,
+      just_completed_line: newLines > 0,
+      next_line_reachable: nextLineReachable,
       busted,
-      ticket_won: ticketWon,
-      board: boardPayload(festival, artists, freshCells, gridSize, board.won_ticket || !!ticketWon),
+      tickets_won: ticketsWon,
+      // back-compat: first ticket won this call, if any
+      ticket_won: ticketsWon[0] || null,
+      board: boardPayload(festival, artists, freshCells, gridSize, completedLines >= 1, Math.max(completedLines, previousLines)),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

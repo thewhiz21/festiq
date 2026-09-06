@@ -81,6 +81,7 @@
   .tag{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:3px 9px;border:1px solid;border-radius:20px;}
   .tag-live{color:var(--green);border-color:var(--green);background:rgba(0,255,179,0.08);}
   .tag-won{color:var(--gold);border-color:var(--gold);background:rgba(255,213,79,0.08);}
+  .tag-upcoming{color:var(--txt2);border-color:var(--border2);background:rgba(255,255,255,0.04);}
 
   .header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(8,10,16,0.88);backdrop-filter:blur(8px);z-index:50;}
   .logo,.logo span{
@@ -102,6 +103,8 @@
 
   .festival-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:24px;}
   .festival-card{background:var(--bg1);border:1px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:transform .22s cubic-bezier(0.16,1,0.3,1),border-color .15s;}
+  .festival-card.is-upcoming{cursor:default;opacity:0.6;}
+  .festival-card.is-upcoming:hover{transform:none;}
   .festival-card:hover{transform:translateY(-4px);border-color:var(--border2);}
   .festival-banner{height:80px;display:flex;align-items:flex-end;padding:12px 14px;}
   .festival-body{padding:14px 16px 16px;}
@@ -426,22 +429,74 @@ function renderList(){
   fetch(`${API}/api/festivals`).then(r => r.json()).then(list => {
     const grid = document.getElementById('festival-grid');
     if (!list.length) { grid.innerHTML = '<div class="empty">No festivals live yet.</div>'; return; }
-    grid.innerHTML = list.map(f => `
-      <div class="festival-card" onclick="navigate('#/f/${f.slug}')">
+    grid.innerHTML = list.map(f => {
+      const isLive = f.status === 'live';
+      const soldOut = isLive && f.tickets_awarded >= f.tickets_available;
+      const tag = !isLive ? { cls: 'tag-upcoming', label: 'Upcoming' }
+                : soldOut ? { cls: 'tag-won', label: 'Tickets Claimed' }
+                : { cls: 'tag-live', label: 'Live' };
+      return `
+      <div class="festival-card ${!isLive ? 'is-upcoming' : ''}" ${isLive ? `onclick="navigate('#/f/${f.slug}')"` : ''}>
         <div class="festival-banner" style="background:linear-gradient(135deg, ${f.banner_color}, #10101c);">
-          <span class="tag ${f.tickets_awarded >= f.tickets_available ? 'tag-won' : 'tag-live'}">
-            ${f.tickets_awarded >= f.tickets_available ? 'Ticket Claimed' : 'Live'}
-          </span>
+          <span class="tag ${tag.cls}">${tag.label}</span>
         </div>
         <div class="festival-body">
           <h3>${f.name}</h3>
           <div class="meta">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
-          <div class="meta">${f.lineup_count} artists on the board · $${(f.token_price_usd_cents/100).toFixed(0)}/try</div>
-          <div class="meta" style="color:var(--gold);font-weight:700;">🎁 ${f.ticket_prize_label}</div>
+          ${isLive
+            ? `<div class="meta">${f.lineup_count} artists on the board · 🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'}/try</div>
+               <div class="meta" style="color:var(--gold);font-weight:700;">🎁 ${f.ticket_prize_label} · up to ${f.tickets_available} ticket${f.tickets_available === 1 ? '' : 's'}</div>`
+            : `<div class="meta">Lineup drops soon</div>`}
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   });
+}
+
+// Small static illustration of what "1 line" vs "2 lines" looks like on
+// this festival's actual board size — same idea as PropQuix Solo's
+// TierExplainer mini-boards, drawn with plain divs instead of React.
+function miniBoardHTML(gridSize, firstLine, secondLine){
+  const total = gridSize * gridSize;
+  let cells = '';
+  for (let i = 0; i < total; i++) {
+    const isFirst = firstLine.includes(i);
+    const isSecond = secondLine && secondLine.includes(i);
+    const color = isSecond ? 'var(--gold)' : isFirst ? 'var(--green)' : 'var(--txt3)';
+    const bg = isSecond ? 'rgba(255,213,79,0.18)' : isFirst ? 'rgba(0,255,179,0.14)' : 'var(--bg2)';
+    cells += `<div style="aspect-ratio:1;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;border:1px solid ${color};background:${bg};color:${color};">${isFirst || isSecond ? '✓' : ''}</div>`;
+  }
+  return `<div style="display:grid;grid-template-columns:repeat(${gridSize},1fr);gap:4px;width:${gridSize * 28}px;margin:0 auto;">${cells}</div>`;
+}
+
+function tierExplainerHTML(f){
+  const g = f.grid_size;
+  const firstLine = Array.from({ length: g }, (_, i) => i); // top row
+  const secondLine = Array.from({ length: g }, (_, i) => i * g); // left column — shares one square with the first line
+  const showTier2 = f.tickets_available >= 2;
+  return `
+    <div style="margin-bottom:26px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;">
+        <div style="padding:18px 14px;border-radius:8px;border:1px solid var(--green);background:rgba(0,255,179,0.06);text-align:center;">
+          <div style="font-family:var(--display);font-size:15px;font-weight:800;color:var(--green);line-height:1;">1 TICKET</div>
+          <div style="font-size:9.5px;color:var(--green);font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:12px;">${f.ticket_prize_label}</div>
+          ${miniBoardHTML(g, firstLine)}
+          <div style="font-size:10.5px;color:var(--txt2);margin-top:10px;">Clear any 1 row, column, or diagonal first</div>
+        </div>
+        ${showTier2 ? `
+        <div style="padding:18px 14px;border-radius:8px;border:1px solid var(--gold);background:rgba(255,213,79,0.06);text-align:center;">
+          <div style="font-family:var(--display);font-size:15px;font-weight:800;color:var(--gold);line-height:1;">2 TICKETS</div>
+          <div style="font-size:9.5px;color:var(--gold);font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:12px;">${f.ticket_prize_label} ×2</div>
+          ${miniBoardHTML(g, firstLine, secondLine)}
+          <div style="font-size:10.5px;color:var(--txt2);margin-top:10px;">Then land a 2nd line, if one's still reachable</div>
+        </div>` : ''}
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:var(--txt2);text-align:center;">
+        💀 Every square is one shot — fail it and it's dead for this board. If no line can ever be completed anymore, that's a bust: game over.
+      </div>
+    </div>
+  `;
 }
 
 function renderFestival(slug){
@@ -451,8 +506,22 @@ function renderFestival(slug){
   fetch(`${API}/api/festivals/${slug}`, { headers: authHeaders() }).then(r => r.json()).then(f => {
     if (f.error) { app.innerHTML = `<div class="empty">${f.error}</div>`; return; }
     currentFestival = f;
+
+    if (f.status !== 'live') {
+      app.innerHTML = `
+        <a href="#/" class="backlink">← ALL FESTIVALS</a>
+        <div style="text-align:center;margin:60px 0;">
+          <div class="eyebrow" style="font-size:10px;color:var(--txt2);letter-spacing:0.14em;font-weight:700;margin-bottom:8px;text-transform:uppercase;">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
+          <div style="font-family:var(--display);font-size:32px;font-weight:800;line-height:1;margin-bottom:12px;">${f.name}</div>
+          <div style="font-size:12.5px;color:var(--txt2);">Lineup and trivia board drop closer to the date. Check back soon.</div>
+        </div>
+      `;
+      return;
+    }
+
     const cells = f.board ? f.board.cells : f.artists.map(a => ({ ...a, artist_id: a.id, status: 'available' }));
-    const wonTicket = f.board && f.board.won_ticket;
+    const linesCompleted = f.board ? f.board.lines_completed : 0;
+    const maxTiers = f.board ? f.board.max_tiers : 2;
     const clearedCount = cells.filter(c => c.status === 'cleared').length;
 
     app.innerHTML = `
@@ -463,25 +532,27 @@ function renderFestival(slug){
         <div style="font-size:12.5px;color:var(--txt2);max-width:520px;margin:0 auto;">Clear any row, column, or diagonal of artist trivia to win ${f.ticket_prize_label}. One shot per artist — hard on purpose.</div>
       </div>
 
-      ${wonTicket ? `<div class="banner-block banner-gold">🎉 You already won a ticket to this festival! Claim code: ${wonTicket.claim_code || ''}</div>` : ''}
+      ${tierExplainerHTML(f)}
+
+      ${linesCompleted >= 1 ? `<div class="banner-block banner-gold">🎉 You've won ${linesCompleted} ticket${linesCompleted === 1 ? '' : 's'} on this board! ${linesCompleted < maxTiers ? 'Keep going for another line.' : 'Max tickets reached — board complete.'}</div>` : ''}
 
       <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
         <div class="stat-tile"><div class="icon">🎟️</div><div class="val" style="color:var(--gold);" id="wallet-stat">${user ? '—' : '—'}</div><div class="lbl">Tokens</div></div>
         <div class="stat-tile"><div class="icon">✅</div><div class="val" style="color:var(--green);">${clearedCount}/${cells.length}</div><div class="lbl">Cleared</div></div>
-        <div class="stat-tile"><div class="icon">💵</div><div class="val">$${(f.token_price_usd_cents/100).toFixed(0)}</div><div class="lbl">Per Try</div></div>
+        <div class="stat-tile"><div class="icon">🏆</div><div class="val" style="color:var(--gold);">${linesCompleted}/${maxTiers}</div><div class="lbl">Tickets Won</div></div>
       </div>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
         ${user ? `<button class="btn btn-gold" style="flex:1;min-width:180px;" onclick="claimFreeToken()">🎁 CLAIM FREE TOKEN</button>
-                  <button class="btn btn-purple" style="flex:1;min-width:180px;" onclick="demoBuyTokens(5)">+5 TOKENS ($${((f.token_price_usd_cents*5)/100).toFixed(0)} DEMO)</button>`
+                  <button class="btn btn-purple" style="flex:1;min-width:180px;" onclick="demoBuyTokens(5)">+5 TOKENS (DEMO)</button>`
                : `<button class="btn btn-purple" style="flex:1;" onclick="openAuthModal()">LOG IN TO PLAY →</button>`}
       </div>
 
       <div style="font-size:11px;color:var(--txt2);letter-spacing:0.1em;font-weight:600;margin-bottom:12px;text-transform:uppercase;">
-        The board — ${f.entry_cost_tokens} token per artist, one shot each
+        The board — 🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist, one shot each
       </div>
       <div class="board-grid" id="board-grid" style="grid-template-columns:repeat(${f.grid_size},1fr);"></div>
-      <div class="footer-note">Entry costs ${f.entry_cost_tokens} token (~$${(f.token_price_usd_cents/100).toFixed(0)}) per artist attempt. Fail and that artist is dead for this board — no retries.</div>
+      <div class="footer-note">Entry costs ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist attempt. Fail and that artist is dead for this board — no retries.</div>
     `;
 
     refreshWallet();
@@ -686,7 +757,10 @@ function submitQuiz(){
     if (d.error) { toast(d.error); closeModal('quiz-modal'); return; }
     closeModal('quiz-modal');
     if (d.ticket_won) {
-      toast(`🎉 LINE COMPLETE! You won: ${d.ticket_won.prize} — claim code ${d.ticket_won.claim_code}`);
+      const tierMsg = d.board.lines_completed >= d.board.max_tiers ? ' — max tickets reached, board complete!' : ' — keep going, a 2nd line is still in play!';
+      toast(`🎉 LINE COMPLETE! You won: ${d.ticket_won.prize} — claim code ${d.ticket_won.claim_code}${tierMsg}`);
+    } else if (d.passed && d.board.lines_completed >= 1 && !d.next_line_reachable) {
+      toast(`✅ ${d.artist.name} cleared — but a 2nd line is no longer reachable. Your ticket is locked in either way.`);
     } else if (d.passed) {
       toast(`✅ Correct — ${d.artist.name} cleared! (${d.correct_count}/${d.total})`);
     } else if (d.busted) {

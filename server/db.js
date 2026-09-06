@@ -69,9 +69,12 @@ async function initSchema() {
       user_id INTEGER NOT NULL REFERENCES users(id),
       festival_id INTEGER NOT NULL REFERENCES festivals(id),
       won_ticket BOOLEAN NOT NULL DEFAULT FALSE,
+      lines_completed INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(user_id, festival_id)
     );
+    ALTER TABLE boards ADD COLUMN IF NOT EXISTS lines_completed INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE festivals ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'live';
 
     CREATE TABLE IF NOT EXISTS board_cells (
       board_id INTEGER NOT NULL REFERENCES boards(id),
