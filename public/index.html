@@ -83,9 +83,8 @@
   .tag-won{color:var(--gold);border-color:var(--gold);background:rgba(255,213,79,0.08);}
 
   .header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(8,10,16,0.88);backdrop-filter:blur(8px);z-index:50;}
-  .logo{display:flex;align-items:center;gap:8px;font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:0.02em;cursor:pointer;}
+  .logo{font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:0.02em;cursor:pointer;}
   .logo span{background:linear-gradient(90deg,var(--gold),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent;}
-  .logo img{height:32px;width:32px;border-radius:50%;}
   .wrap{max-width:1040px;margin:0 auto;padding:28px 20px 60px;}
   .wallet-pill{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;background:var(--bg2);border:1px solid var(--border2);padding:7px 14px;border-radius:20px;color:var(--gold);}
 
@@ -181,7 +180,7 @@
 <body>
 
 <div class="header">
-  <div class="logo" onclick="navigate('#/')"><img src="/assets/favicon-32.png" alt="" width="32" height="32">FESTI<span>Q</span></div>
+  <div class="logo" onclick="navigate('#/')">FESTI<span>Q</span></div>
   <div style="display:flex;align-items:center;gap:10px;">
     <div id="wallet-pill" class="wallet-pill" style="display:none;">🎟️ <span id="wallet-tokens">0</span> TOKENS</div>
     <button class="btn" id="auth-btn" onclick="openAuthModal()">LOG IN</button>
