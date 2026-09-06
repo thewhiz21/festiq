@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FestiQ — Trivia Your Way Into The Lineup</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+<meta property="og:title" content="FestiQ — Trivia Your Way Into The Lineup">
+<meta property="og:description" content="Pick a festival, pick an artist, answer their trivia. Land a full line and win a ticket to the show.">
+<meta property="og:image" content="/assets/logo-512.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="FestiQ — Trivia Your Way Into The Lineup">
+<meta name="twitter:description" content="Pick a festival, pick an artist, answer their trivia. Land a full line and win a ticket to the show.">
+<meta name="twitter:image" content="/assets/logo-512.png">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Barlow+Condensed:wght@400;500;600;700;800&display=swap');
 
@@ -72,8 +83,9 @@
   .tag-won{color:var(--gold);border-color:var(--gold);background:rgba(255,213,79,0.08);}
 
   .header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(8,10,16,0.88);backdrop-filter:blur(8px);z-index:50;}
-  .logo{font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:0.02em;cursor:pointer;}
+  .logo{display:flex;align-items:center;gap:8px;font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:0.02em;cursor:pointer;}
   .logo span{background:linear-gradient(90deg,var(--gold),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .logo img{height:32px;width:32px;border-radius:50%;}
   .wrap{max-width:1040px;margin:0 auto;padding:28px 20px 60px;}
   .wallet-pill{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;background:var(--bg2);border:1px solid var(--border2);padding:7px 14px;border-radius:20px;color:var(--gold);}
 
@@ -169,7 +181,7 @@
 <body>
 
 <div class="header">
-  <div class="logo" onclick="navigate('#/')">FESTI<span>Q</span></div>
+  <div class="logo" onclick="navigate('#/')"><img src="/assets/favicon-32.png" alt="" width="32" height="32">FESTI<span>Q</span></div>
   <div style="display:flex;align-items:center;gap:10px;">
     <div id="wallet-pill" class="wallet-pill" style="display:none;">🎟️ <span id="wallet-tokens">0</span> TOKENS</div>
     <button class="btn" id="auth-btn" onclick="openAuthModal()">LOG IN</button>

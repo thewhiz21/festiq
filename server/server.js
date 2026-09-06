@@ -35,7 +35,7 @@ function parseCookies(header) {
 
 app.use((req, res, next) => {
   res.setHeader("X-Robots-Tag", "noindex, nofollow"); // never index while under wraps (or after, until you ask to)
-  if (!SITE_LOCKED || req.path.startsWith("/api/")) return next();
+  if (!SITE_LOCKED || req.path.startsWith("/api/") || req.path.startsWith("/assets/")) return next();
 
   const cookies = parseCookies(req.headers.cookie);
   const keyFromQuery = req.query.key;
