@@ -19,9 +19,36 @@ app.use(express.json());
 // a cookie; everyone else — including search crawlers — only ever sees
 // coming-soon.html. API routes are left open (they're meaningless without
 // the frontend, and the preview unlock itself doesn't need them gated).
-const SITE_LOCKED = process.env.SITE_LOCKED !== "false"; // locked by default
-const PREVIEW_KEY = process.env.PREVIEW_KEY || "";
 const PREVIEW_COOKIE = "festiq_preview";
+
+// In-memory cache of admin-editable settings, loaded from the DB at boot
+// and refreshed whenever the admin panel writes one. Falls back to the
+// env var of the same name when no DB row exists yet.
+const siteSettings = {
+  site_locked: process.env.SITE_LOCKED !== "false",
+  preview_key: process.env.PREVIEW_KEY || "",
+};
+
+async function loadSiteSettings() {
+  try {
+    const { rows } = await pool.query(`SELECT key, value FROM settings WHERE key IN ('site_locked', 'preview_key')`);
+    for (const row of rows) {
+      if (row.key === "site_locked") siteSettings.site_locked = row.value === "true";
+      if (row.key === "preview_key") siteSettings.preview_key = row.value || "";
+    }
+  } catch (err) {
+    console.error("Failed to load site settings, using env var defaults:", err.message);
+  }
+}
+
+async function saveSiteSetting(key, value) {
+  await pool.query(
+    `INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [key, String(value)]
+  );
+  if (key === "site_locked") siteSettings.site_locked = value === true || value === "true";
+  if (key === "preview_key") siteSettings.preview_key = value || "";
+}
 
 function parseCookies(header) {
   const out = {};
@@ -35,10 +62,17 @@ function parseCookies(header) {
 
 app.use((req, res, next) => {
   res.setHeader("X-Robots-Tag", "noindex, nofollow"); // never index while under wraps (or after, until you ask to)
-  if (!SITE_LOCKED || req.path.startsWith("/api/") || req.path.startsWith("/assets/")) return next();
+  if (
+    !siteSettings.site_locked ||
+    req.path.startsWith("/api/") ||
+    req.path.startsWith("/assets/") ||
+    req.path.startsWith("/admin")
+  )
+    return next();
 
   const cookies = parseCookies(req.headers.cookie);
   const keyFromQuery = req.query.key;
+  const PREVIEW_KEY = siteSettings.preview_key;
 
   if (PREVIEW_KEY && keyFromQuery === PREVIEW_KEY) {
     res.setHeader(
@@ -51,6 +85,8 @@ app.use((req, res, next) => {
 
   res.status(200).sendFile(path.join(__dirname, "..", "public", "coming-soon.html"));
 });
+
+app.get("/admin", (req, res) => res.sendFile(path.join(__dirname, "..", "public", "admin.html")));
 
 app.use(express.static(path.join(__dirname, "..", "public")));
 
@@ -71,6 +107,15 @@ function requireAuth(req, res, next) {
   } catch {
     res.status(401).json({ error: "Invalid or expired token" });
   }
+}
+
+// Admin panel auth — same shared-secret-header pattern as PropQuix's admin.
+function requireAdmin(req, res, next) {
+  const secret = req.headers["x-admin-secret"];
+  if (!process.env.ADMIN_SECRET || secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
 }
 
 async function getOrCreateWallet(userId) {
@@ -469,9 +514,11 @@ app.post("/api/festivals/:slug/submit", requireAuth, async (req, res) => {
   }
 });
 
-// ─── Minimal admin (dev only — no auth gate yet, prototype scope) ──────────
+// ─── Admin API ──────────────────────────────────────────────────────────────
+// Everything below requires the x-admin-secret header to match ADMIN_SECRET
+// (same pattern as PropQuix's admin panel). The UI lives at /admin.
 
-app.post("/api/admin/reset-board", async (req, res) => {
+app.post("/api/admin/reset-board", requireAdmin, async (req, res) => {
   try {
     const { email, slug } = req.body;
     const { rows: uRows } = await pool.query(`SELECT id FROM users WHERE email = $1`, [(email || "").toLowerCase().trim()]);
@@ -490,12 +537,341 @@ app.post("/api/admin/reset-board", async (req, res) => {
   }
 });
 
+// ── Settings (site lock / preview key, editable without a redeploy) ────────
+
+app.get("/api/admin/settings", requireAdmin, (req, res) => {
+  res.json({ site_locked: siteSettings.site_locked, preview_key: siteSettings.preview_key });
+});
+
+app.post("/api/admin/settings", requireAdmin, async (req, res) => {
+  try {
+    if (typeof req.body.site_locked === "boolean") await saveSiteSetting("site_locked", req.body.site_locked);
+    if (typeof req.body.preview_key === "string") await saveSiteSetting("preview_key", req.body.preview_key);
+    res.json({ site_locked: siteSettings.site_locked, preview_key: siteSettings.preview_key });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Dashboard ────────────────────────────────────────────────────────────
+
+app.get("/api/admin/dashboard", requireAdmin, async (req, res) => {
+  try {
+    const [users, festivals, tokens, boards, ticketsAwarded, ticketsPending] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS n FROM users`),
+      pool.query(`SELECT status, COUNT(*)::int AS n FROM festivals GROUP BY status`),
+      pool.query(`SELECT COALESCE(SUM(tokens), 0)::int AS n FROM wallets`),
+      pool.query(`SELECT COUNT(*)::int AS n FROM boards`),
+      pool.query(`SELECT COUNT(*)::int AS n FROM tickets_won`),
+      pool.query(`SELECT COUNT(*)::int AS n FROM tickets_won WHERE fulfilled = FALSE`),
+    ]);
+    const byStatus = Object.fromEntries(festivals.rows.map((r) => [r.status, r.n]));
+    res.json({
+      total_users: users.rows[0].n,
+      total_festivals: festivals.rows.reduce((sum, r) => sum + r.n, 0),
+      live_festivals: byStatus.live || 0,
+      upcoming_festivals: byStatus.upcoming || 0,
+      tokens_in_circulation: tokens.rows[0].n,
+      boards_played: boards.rows[0].n,
+      tickets_awarded: ticketsAwarded.rows[0].n,
+      tickets_pending_fulfillment: ticketsPending.rows[0].n,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Festivals ────────────────────────────────────────────────────────────
+
+app.get("/api/admin/festivals", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT f.*, COUNT(a.id)::int AS artist_count
+      FROM festivals f
+      LEFT JOIN artists a ON a.festival_id = f.id
+      GROUP BY f.id
+      ORDER BY f.created_at DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/festivals", requireAdmin, async (req, res) => {
+  try {
+    const { slug, name, location, event_date, banner_color, entry_cost_tokens, ticket_prize_label, status, tickets_available } = req.body;
+    if (!slug || !name) return res.status(400).json({ error: "slug and name are required" });
+    const { rows } = await pool.query(
+      `INSERT INTO festivals (slug, name, location, event_date, banner_color, entry_cost_tokens, ticket_prize_label, status, tickets_available)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [
+        slug.trim(),
+        name.trim(),
+        location || null,
+        event_date || null,
+        banner_color || "#ff3d81",
+        entry_cost_tokens ?? 1,
+        ticket_prize_label || "1 General Admission Ticket",
+        status || "upcoming",
+        tickets_available ?? 0,
+      ]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ error: "A festival with that slug already exists" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/admin/festivals/:id", requireAdmin, async (req, res) => {
+  try {
+    const fields = ["slug", "name", "location", "event_date", "banner_color", "entry_cost_tokens", "ticket_prize_label", "status", "tickets_available", "tickets_awarded"];
+    const updates = fields.filter((f) => req.body[f] !== undefined);
+    if (!updates.length) return res.status(400).json({ error: "No fields to update" });
+    const setClause = updates.map((f, i) => `${f} = $${i + 2}`).join(", ");
+    const values = updates.map((f) => req.body[f]);
+    const { rows } = await pool.query(`UPDATE festivals SET ${setClause} WHERE id = $1 RETURNING *`, [req.params.id, ...values]);
+    if (!rows.length) return res.status(404).json({ error: "Festival not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/admin/festivals/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    await pool.query(`DELETE FROM board_cells WHERE board_id IN (SELECT id FROM boards WHERE festival_id = $1)`, [id]);
+    await pool.query(`DELETE FROM boards WHERE festival_id = $1`, [id]);
+    await pool.query(`DELETE FROM pending_attempts WHERE festival_id = $1`, [id]);
+    await pool.query(`DELETE FROM tickets_won WHERE festival_id = $1`, [id]);
+    await pool.query(`DELETE FROM questions WHERE artist_id IN (SELECT id FROM artists WHERE festival_id = $1)`, [id]);
+    await pool.query(`DELETE FROM artists WHERE festival_id = $1`, [id]);
+    const { rowCount } = await pool.query(`DELETE FROM festivals WHERE id = $1`, [id]);
+    if (!rowCount) return res.status(404).json({ error: "Festival not found" });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Artists / lineup ─────────────────────────────────────────────────────
+
+app.get("/api/admin/festivals/:id/artists", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT a.*, COUNT(q.id)::int AS question_count
+      FROM artists a
+      LEFT JOIN questions q ON q.artist_id = a.id
+      WHERE a.festival_id = $1
+      GROUP BY a.id
+      ORDER BY a.position ASC
+    `, [req.params.id]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/festivals/:id/artists", requireAdmin, async (req, res) => {
+  try {
+    const { name, genre, set_time, position, difficulty } = req.body;
+    if (!name) return res.status(400).json({ error: "name is required" });
+    const { rows } = await pool.query(
+      `INSERT INTO artists (festival_id, name, genre, set_time, position, difficulty) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [req.params.id, name.trim(), genre || null, set_time || null, position ?? 0, difficulty || "medium"]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/admin/artists/:id", requireAdmin, async (req, res) => {
+  try {
+    const fields = ["name", "genre", "set_time", "position", "difficulty"];
+    const updates = fields.filter((f) => req.body[f] !== undefined);
+    if (!updates.length) return res.status(400).json({ error: "No fields to update" });
+    const setClause = updates.map((f, i) => `${f} = $${i + 2}`).join(", ");
+    const values = updates.map((f) => req.body[f]);
+    const { rows } = await pool.query(`UPDATE artists SET ${setClause} WHERE id = $1 RETURNING *`, [req.params.id, ...values]);
+    if (!rows.length) return res.status(404).json({ error: "Artist not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/admin/artists/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    await pool.query(`DELETE FROM board_cells WHERE artist_id = $1`, [id]);
+    await pool.query(`DELETE FROM questions WHERE artist_id = $1`, [id]);
+    const { rowCount } = await pool.query(`DELETE FROM artists WHERE id = $1`, [id]);
+    if (!rowCount) return res.status(404).json({ error: "Artist not found" });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Trivia questions ─────────────────────────────────────────────────────
+
+app.get("/api/admin/artists/:id/questions", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT * FROM questions WHERE artist_id = $1 ORDER BY id ASC`, [req.params.id]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/artists/:id/questions", requireAdmin, async (req, res) => {
+  try {
+    const { question_text, choice_a, choice_b, choice_c, choice_d, correct_choice } = req.body;
+    if (!question_text || !choice_a || !choice_b || !choice_c || !choice_d || !correct_choice) {
+      return res.status(400).json({ error: "question_text, choice_a..d, and correct_choice are all required" });
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO questions (artist_id, question_text, choice_a, choice_b, choice_c, choice_d, correct_choice)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [req.params.id, question_text, choice_a, choice_b, choice_c, choice_d, correct_choice]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/admin/questions/:id", requireAdmin, async (req, res) => {
+  try {
+    const fields = ["question_text", "choice_a", "choice_b", "choice_c", "choice_d", "correct_choice"];
+    const updates = fields.filter((f) => req.body[f] !== undefined);
+    if (!updates.length) return res.status(400).json({ error: "No fields to update" });
+    const setClause = updates.map((f, i) => `${f} = $${i + 2}`).join(", ");
+    const values = updates.map((f) => req.body[f]);
+    const { rows } = await pool.query(`UPDATE questions SET ${setClause} WHERE id = $1 RETURNING *`, [req.params.id, ...values]);
+    if (!rows.length) return res.status(404).json({ error: "Question not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/admin/questions/:id", requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(`DELETE FROM questions WHERE id = $1`, [req.params.id]);
+    if (!rowCount) return res.status(404).json({ error: "Question not found" });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Users ────────────────────────────────────────────────────────────────
+
+app.get("/api/admin/users", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT u.id, u.email, u.display_name, u.created_at,
+             COALESCE(w.tokens, 0) AS tokens,
+             (SELECT COUNT(*)::int FROM boards b WHERE b.user_id = u.id) AS boards_played,
+             (SELECT COUNT(*)::int FROM tickets_won t WHERE t.user_id = u.id) AS tickets_won
+      FROM users u
+      LEFT JOIN wallets w ON w.user_id = u.id
+      ORDER BY u.created_at DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/users/:id/tokens", requireAdmin, async (req, res) => {
+  try {
+    const { delta, set } = req.body;
+    await pool.query(`INSERT INTO wallets (user_id, tokens) VALUES ($1, 0) ON CONFLICT (user_id) DO NOTHING`, [req.params.id]);
+    let rows;
+    if (typeof set === "number") {
+      ({ rows } = await pool.query(`UPDATE wallets SET tokens = $2, updated_at = NOW() WHERE user_id = $1 RETURNING *`, [req.params.id, Math.max(0, set)]));
+    } else if (typeof delta === "number") {
+      ({ rows } = await pool.query(
+        `UPDATE wallets SET tokens = GREATEST(0, tokens + $2), updated_at = NOW() WHERE user_id = $1 RETURNING *`,
+        [req.params.id, delta]
+      ));
+    } else {
+      return res.status(400).json({ error: "Provide either delta or set" });
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
+  try {
+    const id = req.params.id;
+    await pool.query(`DELETE FROM board_cells WHERE board_id IN (SELECT id FROM boards WHERE user_id = $1)`, [id]);
+    await pool.query(`DELETE FROM boards WHERE user_id = $1`, [id]);
+    await pool.query(`DELETE FROM pending_attempts WHERE user_id = $1`, [id]);
+    await pool.query(`DELETE FROM tickets_won WHERE user_id = $1`, [id]);
+    await pool.query(`DELETE FROM wallets WHERE user_id = $1`, [id]);
+    const { rowCount } = await pool.query(`DELETE FROM users WHERE id = $1`, [id]);
+    if (!rowCount) return res.status(404).json({ error: "User not found" });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Tickets / winners ────────────────────────────────────────────────────
+
+app.get("/api/admin/tickets", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT t.*, u.email, u.display_name, f.name AS festival_name, f.slug AS festival_slug
+      FROM tickets_won t
+      JOIN users u ON u.id = t.user_id
+      JOIN festivals f ON f.id = t.festival_id
+      ORDER BY t.won_at DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/tickets/:id/claim-code", requireAdmin, async (req, res) => {
+  try {
+    const { claim_code } = req.body;
+    if (!claim_code) return res.status(400).json({ error: "claim_code is required" });
+    const { rows } = await pool.query(`UPDATE tickets_won SET claim_code = $2 WHERE id = $1 RETURNING *`, [req.params.id, claim_code]);
+    if (!rows.length) return res.status(404).json({ error: "Ticket not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/tickets/:id/fulfill", requireAdmin, async (req, res) => {
+  try {
+    const fulfilled = req.body.fulfilled !== false;
+    const { rows } = await pool.query(`UPDATE tickets_won SET fulfilled = $2 WHERE id = $1 RETURNING *`, [req.params.id, fulfilled]);
+    if (!rows.length) return res.status(404).json({ error: "Ticket not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 4200;
 
 (async () => {
   try {
     await initSchema();
     await seed();
+    await loadSiteSettings();
     app.listen(PORT, () => console.log(`FestiQ running on port ${PORT}`));
   } catch (err) {
     console.error("Failed to start FestiQ:", err);

@@ -102,6 +102,14 @@ async function initSchema() {
       fulfilled BOOLEAN NOT NULL DEFAULT FALSE,
       won_at TIMESTAMPTZ DEFAULT NOW()
     );
+
+    -- Admin-editable runtime settings (site lock / preview key overrides,
+    -- etc.) so the admin panel can flip these without a redeploy. Falls
+    -- back to the env vars of the same name when a row isn't set.
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
   `);
 }
 

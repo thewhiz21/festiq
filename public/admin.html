@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>FestiQ Admin</title>
+<style>
+  :root{
+    --bg:#080a10; --bg1:#10101c; --bg2:#181828;
+    --border:#22222e; --border2:#2c2c3a;
+    --txt:#f2f2f7; --txt2:#8a8a9a;
+    --blue:#4da6ff; --purple:#c084fc; --pink:#ff3d81; --gold:#ffcf5c; --green:#3ddc84; --red:#ff5c5c;
+    --mono:'SF Mono',Consolas,'Courier New',monospace;
+    --display:Georgia,'Times New Roman',serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--txt);font-family:var(--mono);font-size:13px;min-height:100vh;}
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-track{background:var(--bg);}
+  ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:5px;}
+  a{color:inherit;}
+  input,select,textarea{font-family:var(--mono);font-size:12px;background:var(--bg2);border:1px solid var(--border2);color:var(--txt);padding:8px 11px;outline:none;border-radius:4px;width:100%;}
+  input:focus,select:focus,textarea:focus{border-color:var(--blue);}
+  button{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border:1px solid var(--border2);background:transparent;color:var(--txt2);padding:8px 14px;cursor:pointer;border-radius:4px;transition:all .15s;}
+  button:hover{border-color:var(--txt2);color:var(--txt);}
+  .btn-blue{border-color:var(--blue);color:var(--blue);}
+  .btn-blue:hover{background:var(--blue);color:#000;}
+  .btn-purple{border-color:var(--purple);color:var(--purple);}
+  .btn-purple:hover{background:var(--purple);color:#000;}
+  .btn-red{border-color:var(--red);color:var(--red);}
+  .btn-red:hover{background:var(--red);color:#000;}
+  .btn-green{border-color:var(--green);color:var(--green);}
+  .btn-green:hover{background:var(--green);color:#000;}
+  .btn-sm{padding:5px 10px;font-size:10px;}
+
+  #login{min-height:100vh;display:flex;align-items:center;justify-content:center;}
+  #login .box{background:var(--bg1);border:1px solid var(--border2);border-radius:10px;padding:32px;width:100%;max-width:340px;}
+  #login h1{font-family:var(--display);font-size:22px;margin-bottom:4px;}
+  #login p{color:var(--txt2);font-size:11px;margin-bottom:18px;}
+  #login input{margin-bottom:12px;}
+  #login .err{color:var(--red);font-size:11px;margin-top:8px;min-height:14px;}
+
+  #app{display:none;}
+  header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10;}
+  header .logo{font-family:var(--display);font-size:19px;font-weight:800;}
+  header .logo span{color:var(--pink);}
+  header .logo small{font-family:var(--mono);font-size:10px;color:var(--txt2);font-weight:400;margin-left:8px;letter-spacing:.05em;}
+  nav{display:flex;gap:4px;padding:12px 24px;border-bottom:1px solid var(--border);overflow-x:auto;}
+  nav button{white-space:nowrap;}
+  nav button.active{border-color:var(--pink);color:var(--pink);background:rgba(255,61,129,0.08);}
+  main{padding:24px;max-width:1200px;margin:0 auto;}
+  .tab{display:none;}
+  .tab.active{display:block;}
+
+  .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;}
+  .stat-tile{background:var(--bg1);border:1px solid var(--border2);border-radius:8px;padding:16px;}
+  .stat-tile .val{font-family:var(--display);font-size:26px;font-weight:800;}
+  .stat-tile .lbl{font-size:10px;color:var(--txt2);text-transform:uppercase;letter-spacing:.06em;margin-top:4px;}
+
+  .card{background:var(--bg1);border:1px solid var(--border2);border-radius:8px;padding:18px;margin-bottom:18px;}
+  .card h2{font-family:var(--display);font-size:16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;}
+  .card h2 small{font-family:var(--mono);font-size:10px;color:var(--txt2);font-weight:400;}
+
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  th{text-align:left;color:var(--txt2);font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:8px;border-bottom:1px solid var(--border2);}
+  td{padding:9px 8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  tr:hover td{background:rgba(255,255,255,0.02);}
+  .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;}
+  .pill-live{background:rgba(61,220,132,0.15);color:var(--green);}
+  .pill-upcoming{background:rgba(255,207,92,0.15);color:var(--gold);}
+  .pill-yes{background:rgba(61,220,132,0.15);color:var(--green);}
+  .pill-no{background:rgba(255,92,92,0.15);color:var(--red);}
+  .actions{display:flex;gap:6px;flex-wrap:wrap;}
+  .table-wrap{overflow-x:auto;}
+  .empty{color:var(--txt2);font-size:12px;padding:20px;text-align:center;}
+
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+  .form-grid label{grid-column:1/-1;font-size:10px;color:var(--txt2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:-4px;}
+  .form-grid .full{grid-column:1/-1;}
+
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;z-index:100;padding:20px;}
+  .modal-overlay.active{display:flex;}
+  .modal{background:var(--bg1);border:1px solid var(--border2);border-radius:10px;padding:24px;width:100%;max-width:480px;max-height:88vh;overflow-y:auto;}
+  .modal h3{font-family:var(--display);font-size:18px;margin-bottom:14px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:12px 18px;font-size:12px;z-index:200;display:none;}
+  .toast.show{display:block;}
+  .toast.err{border-color:var(--red);color:var(--red);}
+  .toast.ok{border-color:var(--green);color:var(--green);}
+
+  .settings-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);gap:16px;}
+  .settings-row:last-child{border-bottom:none;}
+  .settings-row .desc{color:var(--txt2);font-size:11px;margin-top:3px;}
+  .toggle{position:relative;width:42px;height:22px;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;cursor:pointer;flex-shrink:0;}
+  .toggle.on{background:rgba(61,220,132,0.2);border-color:var(--green);}
+  .toggle .knob{position:absolute;top:1px;left:1px;width:18px;height:18px;border-radius:50%;background:var(--txt2);transition:all .15s;}
+  .toggle.on .knob{left:21px;background:var(--green);}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1>FestiQ <span style="color:var(--pink)">Admin</span></h1>
+    <p>Enter the admin secret to continue.</p>
+    <input type="password" id="secretInput" placeholder="Admin secret" onkeydown="if(event.key==='Enter')login()" />
+    <button class="btn-blue" style="width:100%" onclick="login()">Sign in</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <div class="logo">FESTI<span>Q</span><small>ADMIN</small></div>
+    <button class="btn-sm" onclick="logout()">Sign out</button>
+  </header>
+  <nav>
+    <button data-tab="dashboard" class="active" onclick="switchTab('dashboard')">Dashboard</button>
+    <button data-tab="festivals" onclick="switchTab('festivals')">Festivals</button>
+    <button data-tab="lineup" onclick="switchTab('lineup')">Lineup &amp; Trivia</button>
+    <button data-tab="users" onclick="switchTab('users')">Users</button>
+    <button data-tab="tickets" onclick="switchTab('tickets')">Tickets</button>
+    <button data-tab="settings" onclick="switchTab('settings')">Settings</button>
+  </nav>
+
+  <main>
+    <!-- DASHBOARD -->
+    <div class="tab active" id="tab-dashboard">
+      <div class="stat-row" id="dashStats"></div>
+      <div class="card">
+        <h2>Quick actions</h2>
+        <div class="actions">
+          <button class="btn-blue btn-sm" onclick="switchTab('festivals');openFestivalModal()">+ New festival</button>
+          <button class="btn-sm" onclick="switchTab('tickets')">Review pending tickets</button>
+          <button class="btn-sm" onclick="switchTab('settings')">Site lock settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FESTIVALS -->
+    <div class="tab" id="tab-festivals">
+      <div class="card">
+        <h2>Festivals <button class="btn-blue btn-sm" onclick="openFestivalModal()">+ New festival</button></h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Slug</th><th>Status</th><th>Location</th><th>Date</th><th>Entry</th><th>Tickets</th><th>Artists</th><th>Actions</th></tr></thead>
+            <tbody id="festivalsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- LINEUP -->
+    <div class="tab" id="tab-lineup">
+      <div class="card">
+        <h2>Pick a festival</h2>
+        <select id="lineupFestivalSelect" onchange="loadLineup(this.value)"></select>
+      </div>
+      <div class="card" id="lineupCard" style="display:none">
+        <h2>Lineup <small id="lineupHint"></small><button class="btn-blue btn-sm" onclick="openArtistModal()">+ Add artist</button></h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Name</th><th>Genre</th><th>Set time</th><th>Difficulty</th><th>Questions</th><th>Actions</th></tr></thead>
+            <tbody id="artistsBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" id="questionsCard" style="display:none">
+        <h2 id="questionsTitle">Trivia questions <button class="btn-blue btn-sm" onclick="openQuestionModal()">+ Add question</button></h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Question</th><th>A</th><th>B</th><th>C</th><th>D</th><th>Correct</th><th>Actions</th></tr></thead>
+            <tbody id="questionsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- USERS -->
+    <div class="tab" id="tab-users">
+      <div class="card">
+        <h2>Users</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Email</th><th>Tokens</th><th>Boards played</th><th>Tickets won</th><th>Joined</th><th>Actions</th></tr></thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TICKETS -->
+    <div class="tab" id="tab-tickets">
+      <div class="card">
+        <h2>Tickets won</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>User</th><th>Festival</th><th>Claim code</th><th>Fulfilled</th><th>Won at</th><th>Actions</th></tr></thead>
+            <tbody id="ticketsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="tab" id="tab-settings">
+      <div class="card">
+        <h2>Pre-launch gate</h2>
+        <div class="settings-row">
+          <div>
+            <div>Site locked</div>
+            <div class="desc">When on, everyone except preview-key holders sees the coming-soon page.</div>
+          </div>
+          <div class="toggle" id="siteLockedToggle" onclick="toggleSiteLocked()"><div class="knob"></div></div>
+        </div>
+        <div class="settings-row">
+          <div style="flex:1">
+            <div>Preview key</div>
+            <div class="desc">Shared with anyone you want to let in early, via ?key=... on the site URL.</div>
+            <div style="margin-top:8px;display:flex;gap:8px;">
+              <input id="previewKeyInput" placeholder="preview key" />
+              <button class="btn-blue btn-sm" onclick="savePreviewKey()">Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-overlay" id="modalOverlay"><div class="modal" id="modalBody"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+let SECRET = sessionStorage.getItem('festiq_admin_secret') || '';
+let currentFestivalId = null;
+let currentArtistId = null;
+
+function api(path, opts={}){
+  return fetch(path, {
+    ...opts,
+    headers: { 'Content-Type':'application/json', 'x-admin-secret': SECRET, ...(opts.headers||{}) },
+  }).then(async r => {
+    const data = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(data.error || `Request failed (${r.status})`);
+    return data;
+  });
+}
+
+function toast(msg, isErr){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (isErr ? 'err' : 'ok');
+  setTimeout(()=>t.className='toast', 2400);
+}
+
+function login(){
+  const s = document.getElementById('secretInput').value.trim();
+  if(!s) return;
+  fetch('/api/admin/dashboard', { headers:{ 'x-admin-secret': s } }).then(r=>{
+    if(!r.ok) throw new Error('bad secret');
+    SECRET = s;
+    sessionStorage.setItem('festiq_admin_secret', s);
+    document.getElementById('login').style.display='none';
+    document.getElementById('app').style.display='block';
+    boot();
+  }).catch(()=>{
+    document.getElementById('loginErr').textContent = 'Incorrect secret.';
+  });
+}
+
+function logout(){
+  sessionStorage.removeItem('festiq_admin_secret');
+  location.reload();
+}
+
+function switchTab(name){
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.id==='tab-'+name));
+  if(name==='dashboard') loadDashboard();
+  if(name==='festivals') loadFestivals();
+  if(name==='lineup') loadLineupFestivalOptions();
+  if(name==='users') loadUsers();
+  if(name==='tickets') loadTickets();
+  if(name==='settings') loadSettings();
+}
+
+function boot(){ loadDashboard(); }
+
+// ── Dashboard ──
+function loadDashboard(){
+  api('/api/admin/dashboard').then(d=>{
+    const tiles = [
+      ['Total users', d.total_users],
+      ['Live festivals', d.live_festivals],
+      ['Upcoming festivals', d.upcoming_festivals],
+      ['Tokens in circulation', d.tokens_in_circulation],
+      ['Boards played', d.boards_played],
+      ['Tickets awarded', d.tickets_awarded],
+      ['Pending fulfillment', d.tickets_pending_fulfillment],
+    ];
+    document.getElementById('dashStats').innerHTML = tiles.map(([lbl,val])=>`
+      <div class="stat-tile"><div class="val">${val}</div><div class="lbl">${lbl}</div></div>
+    `).join('');
+  }).catch(e=>toast(e.message, true));
+}
+
+// ── Festivals ──
+function loadFestivals(){
+  api('/api/admin/festivals').then(list=>{
+    document.getElementById('festivalsBody').innerHTML = list.length ? list.map(f=>`
+      <tr>
+        <td>${esc(f.name)}</td>
+        <td>${esc(f.slug)}</td>
+        <td><span class="pill pill-${f.status}">${esc(f.status)}</span></td>
+        <td>${esc(f.location||'—')}</td>
+        <td>${esc(f.event_date||'—')}</td>
+        <td>${f.entry_cost_tokens} tok</td>
+        <td>${f.tickets_awarded}/${f.tickets_available}</td>
+        <td>${f.artist_count}</td>
+        <td class="actions">
+          <button class="btn-sm" onclick='openFestivalModal(${JSON.stringify(f)})'>Edit</button>
+          <button class="btn-sm ${f.status==='live'?'':'btn-green'}" onclick="toggleFestivalStatus(${f.id}, '${f.status}')">${f.status==='live'?'Set upcoming':'Go live'}</button>
+          <button class="btn-red btn-sm" onclick="deleteFestival(${f.id}, '${escAttr(f.name)}')">Delete</button>
+        </td>
+      </tr>
+    `).join('') : `<tr><td colspan="9" class="empty">No festivals yet.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
+}
+
+function toggleFestivalStatus(id, status){
+  api(`/api/admin/festivals/${id}`, { method:'PUT', body: JSON.stringify({ status: status==='live' ? 'upcoming' : 'live' }) })
+    .then(()=>{ toast('Updated'); loadFestivals(); }).catch(e=>toast(e.message, true));
+}
+
+function deleteFestival(id, name){
+  if(!confirm(`Delete "${name}"? This removes its lineup, boards, and ticket records too.`)) return;
+  api(`/api/admin/festivals/${id}`, { method:'DELETE' }).then(()=>{ toast('Deleted'); loadFestivals(); }).catch(e=>toast(e.message, true));
+}
+
+function openFestivalModal(f){
+  f = f || {};
+  const isEdit = !!f.id;
+  document.getElementById('modalBody').innerHTML = `
+    <h3>${isEdit ? 'Edit festival' : 'New festival'}</h3>
+    <div class="form-grid">
+      <label>Name</label>
+      <input class="full" id="f_name" value="${escAttr(f.name||'')}" />
+      <label>Slug (URL-safe, unique)</label>
+      <input class="full" id="f_slug" value="${escAttr(f.slug||'')}" ${isEdit?'':''} />
+      <label>Location</label>
+      <input id="f_location" value="${escAttr(f.location||'')}" />
+      <label>Event date</label>
+      <input id="f_event_date" value="${escAttr(f.event_date||'')}" placeholder="2026-11-14" />
+      <label>Banner color</label>
+      <input id="f_banner_color" value="${escAttr(f.banner_color||'#ff3d81')}" />
+      <label>Status</label>
+      <select id="f_status">
+        <option value="live" ${f.status==='live'?'selected':''}>Live</option>
+        <option value="upcoming" ${!f.status||f.status==='upcoming'?'selected':''}>Upcoming</option>
+      </select>
+      <label>Entry cost (tokens)</label>
+      <input id="f_entry_cost_tokens" type="number" min="0" value="${f.entry_cost_tokens ?? 1}" />
+      <label>Tickets available</label>
+      <input id="f_tickets_available" type="number" min="0" value="${f.tickets_available ?? 0}" />
+      <label>Ticket prize label</label>
+      <input class="full" id="f_ticket_prize_label" value="${escAttr(f.ticket_prize_label||'1 General Admission Ticket')}" />
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="btn-blue" onclick="saveFestival(${f.id||'null'})">${isEdit?'Save':'Create'}</button>
+    </div>
+  `;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function saveFestival(id){
+  const body = {
+    name: document.getElementById('f_name').value.trim(),
+    slug: document.getElementById('f_slug').value.trim(),
+    location: document.getElementById('f_location').value.trim(),
+    event_date: document.getElementById('f_event_date').value.trim(),
+    banner_color: document.getElementById('f_banner_color').value.trim(),
+    status: document.getElementById('f_status').value,
+    entry_cost_tokens: Number(document.getElementById('f_entry_cost_tokens').value),
+    tickets_available: Number(document.getElementById('f_tickets_available').value),
+    ticket_prize_label: document.getElementById('f_ticket_prize_label').value.trim(),
+  };
+  const req = id ? api(`/api/admin/festivals/${id}`, { method:'PUT', body: JSON.stringify(body) })
+                 : api('/api/admin/festivals', { method:'POST', body: JSON.stringify(body) });
+  req.then(()=>{ closeModal(); toast('Saved'); loadFestivals(); loadLineupFestivalOptions(); }).catch(e=>toast(e.message, true));
+}
+
+// ── Lineup / Artists ──
+function loadLineupFestivalOptions(){
+  api('/api/admin/festivals').then(list=>{
+    const sel = document.getElementById('lineupFestivalSelect');
+    sel.innerHTML = `<option value="">Select a festival…</option>` + list.map(f=>`<option value="${f.id}">${esc(f.name)} (${esc(f.slug)})</option>`).join('');
+    if(currentFestivalId && list.some(f=>f.id===currentFestivalId)){
+      sel.value = currentFestivalId;
+      loadLineup(currentFestivalId);
+    }
+  }).catch(e=>toast(e.message, true));
+}
+
+function loadLineup(festivalId){
+  currentFestivalId = festivalId ? Number(festivalId) : null;
+  document.getElementById('questionsCard').style.display = 'none';
+  currentArtistId = null;
+  if(!currentFestivalId){ document.getElementById('lineupCard').style.display='none'; return; }
+  document.getElementById('lineupCard').style.display='block';
+  api(`/api/admin/festivals/${currentFestivalId}/artists`).then(list=>{
+    document.getElementById('lineupHint').textContent = `${list.length} artist(s)`;
+    document.getElementById('artistsBody').innerHTML = list.length ? list.map(a=>`
+      <tr>
+        <td>${a.position}</td>
+        <td>${esc(a.name)}</td>
+        <td>${esc(a.genre||'—')}</td>
+        <td>${esc(a.set_time||'—')}</td>
+        <td>${esc(a.difficulty)}</td>
+        <td>${a.question_count}</td>
+        <td class="actions">
+          <button class="btn-sm" onclick="loadQuestions(${a.id}, '${escAttr(a.name)}')">Questions</button>
+          <button class="btn-sm" onclick='openArtistModal(${JSON.stringify(a)})'>Edit</button>
+          <button class="btn-red btn-sm" onclick="deleteArtist(${a.id}, '${escAttr(a.name)}')">Delete</button>
+        </td>
+      </tr>
+    `).join('') : `<tr><td colspan="7" class="empty">No artists yet — add one to build the board.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
+}
+
+function openArtistModal(a){
+  if(!currentFestivalId){ toast('Pick a festival first', true); return; }
+  a = a || {};
+  const isEdit = !!a.id;
+  document.getElementById('modalBody').innerHTML = `
+    <h3>${isEdit?'Edit artist':'Add artist'}</h3>
+    <div class="form-grid">
+      <label>Name</label>
+      <input class="full" id="a_name" value="${escAttr(a.name||'')}" />
+      <label>Genre</label>
+      <input id="a_genre" value="${escAttr(a.genre||'')}" />
+      <label>Set time</label>
+      <input id="a_set_time" value="${escAttr(a.set_time||'')}" placeholder="Fri 8:00 PM" />
+      <label>Board position (0-indexed)</label>
+      <input id="a_position" type="number" min="0" value="${a.position ?? 0}" />
+      <label>Difficulty</label>
+      <select id="a_difficulty">
+        <option value="easy" ${a.difficulty==='easy'?'selected':''}>Easy</option>
+        <option value="medium" ${!a.difficulty||a.difficulty==='medium'?'selected':''}>Medium</option>
+        <option value="hard" ${a.difficulty==='hard'?'selected':''}>Hard</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="btn-blue" onclick="saveArtist(${a.id||'null'})">${isEdit?'Save':'Add'}</button>
+    </div>
+  `;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function saveArtist(id){
+  const body = {
+    name: document.getElementById('a_name').value.trim(),
+    genre: document.getElementById('a_genre').value.trim(),
+    set_time: document.getElementById('a_set_time').value.trim(),
+    position: Number(document.getElementById('a_position').value),
+    difficulty: document.getElementById('a_difficulty').value,
+  };
+  const req = id ? api(`/api/admin/artists/${id}`, { method:'PUT', body: JSON.stringify(body) })
+                 : api(`/api/admin/festivals/${currentFestivalId}/artists`, { method:'POST', body: JSON.stringify(body) });
+  req.then(()=>{ closeModal(); toast('Saved'); loadLineup(currentFestivalId); loadFestivals(); }).catch(e=>toast(e.message, true));
+}
+
+function deleteArtist(id, name){
+  if(!confirm(`Remove "${name}" from the lineup? This deletes its trivia questions too.`)) return;
+  api(`/api/admin/artists/${id}`, { method:'DELETE' }).then(()=>{ toast('Removed'); loadLineup(currentFestivalId); loadFestivals(); }).catch(e=>toast(e.message, true));
+}
+
+// ── Questions ──
+function loadQuestions(artistId, name){
+  currentArtistId = artistId;
+  document.getElementById('questionsCard').style.display = 'block';
+  document.getElementById('questionsTitle').innerHTML = `Trivia questions — ${esc(name)} <button class="btn-blue btn-sm" onclick="openQuestionModal()">+ Add question</button>`;
+  api(`/api/admin/artists/${artistId}/questions`).then(list=>{
+    document.getElementById('questionsBody').innerHTML = list.length ? list.map(q=>`
+      <tr>
+        <td>${esc(q.question_text)}</td>
+        <td>${esc(q.choice_a)}</td><td>${esc(q.choice_b)}</td><td>${esc(q.choice_c)}</td><td>${esc(q.choice_d)}</td>
+        <td>${esc(q.correct_choice)}</td>
+        <td class="actions">
+          <button class="btn-sm" onclick='openQuestionModal(${JSON.stringify(q)})'>Edit</button>
+          <button class="btn-red btn-sm" onclick="deleteQuestion(${q.id})">Delete</button>
+        </td>
+      </tr>
+    `).join('') : `<tr><td colspan="7" class="empty">No questions yet for this artist.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
+}
+
+function openQuestionModal(q){
+  q = q || {};
+  const isEdit = !!q.id;
+  document.getElementById('modalBody').innerHTML = `
+    <h3>${isEdit?'Edit question':'Add question'}</h3>
+    <div class="form-grid">
+      <label>Question</label>
+      <textarea class="full" id="q_text" rows="2">${escAttr(q.question_text||'')}</textarea>
+      <label>Choice A</label><input id="q_a" value="${escAttr(q.choice_a||'')}" />
+      <label>Choice B</label><input id="q_b" value="${escAttr(q.choice_b||'')}" />
+      <label>Choice C</label><input id="q_c" value="${escAttr(q.choice_c||'')}" />
+      <label>Choice D</label><input id="q_d" value="${escAttr(q.choice_d||'')}" />
+      <label>Correct choice (A/B/C/D)</label>
+      <select id="q_correct">
+        ${['A','B','C','D'].map(l=>`<option value="${l}" ${q.correct_choice===l?'selected':''}>${l}</option>`).join('')}
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="btn-blue" onclick="saveQuestion(${q.id||'null'})">${isEdit?'Save':'Add'}</button>
+    </div>
+  `;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function saveQuestion(id){
+  const body = {
+    question_text: document.getElementById('q_text').value.trim(),
+    choice_a: document.getElementById('q_a').value.trim(),
+    choice_b: document.getElementById('q_b').value.trim(),
+    choice_c: document.getElementById('q_c').value.trim(),
+    choice_d: document.getElementById('q_d').value.trim(),
+    correct_choice: document.getElementById('q_correct').value,
+  };
+  const req = id ? api(`/api/admin/questions/${id}`, { method:'PUT', body: JSON.stringify(body) })
+                 : api(`/api/admin/artists/${currentArtistId}/questions`, { method:'POST', body: JSON.stringify(body) });
+  req.then(()=>{ closeModal(); toast('Saved'); loadQuestions(currentArtistId, ''); }).catch(e=>toast(e.message, true));
+}
+
+function deleteQuestion(id){
+  if(!confirm('Delete this question?')) return;
+  api(`/api/admin/questions/${id}`, { method:'DELETE' }).then(()=>{ toast('Deleted'); loadQuestions(currentArtistId, ''); }).catch(e=>toast(e.message, true));
+}
+
+// ── Users ──
+function loadUsers(){
+  api('/api/admin/users').then(list=>{
+    document.getElementById('usersBody').innerHTML = list.length ? list.map(u=>`
+      <tr>
+        <td>${esc(u.display_name)}</td>
+        <td>${esc(u.email)}</td>
+        <td>${u.tokens}</td>
+        <td>${u.boards_played}</td>
+        <td>${u.tickets_won}</td>
+        <td>${new Date(u.created_at).toLocaleDateString()}</td>
+        <td class="actions">
+          <button class="btn-sm" onclick="adjustTokens(${u.id}, '${escAttr(u.display_name)}', ${u.tokens})">Adjust tokens</button>
+          <button class="btn-red btn-sm" onclick="deleteUser(${u.id}, '${escAttr(u.display_name)}')">Delete</button>
+        </td>
+      </tr>
+    `).join('') : `<tr><td colspan="7" class="empty">No users yet.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
+}
+
+function adjustTokens(id, name, current){
+  document.getElementById('modalBody').innerHTML = `
+    <h3>Adjust tokens — ${esc(name)}</h3>
+    <p style="color:var(--txt2);font-size:11px;margin-bottom:12px;">Current balance: ${current} tokens</p>
+    <div class="form-grid">
+      <label>Set balance to</label>
+      <input class="full" id="t_set" type="number" min="0" placeholder="e.g. 10" />
+    </div>
+    <div class="form-grid">
+      <label>...or add/remove (use a negative number to remove)</label>
+      <input class="full" id="t_delta" type="number" placeholder="e.g. 5 or -2" />
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="btn-blue" onclick="saveTokens(${id})">Save</button>
+    </div>
+  `;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function saveTokens(id){
+  const setVal = document.getElementById('t_set').value;
+  const deltaVal = document.getElementById('t_delta').value;
+  const body = setVal !== '' ? { set: Number(setVal) } : { delta: Number(deltaVal || 0) };
+  api(`/api/admin/users/${id}/tokens`, { method:'POST', body: JSON.stringify(body) })
+    .then(()=>{ closeModal(); toast('Updated'); loadUsers(); }).catch(e=>toast(e.message, true));
+}
+
+function deleteUser(id, name){
+  if(!confirm(`Delete "${name}"? This removes their wallet, boards, and ticket history.`)) return;
+  api(`/api/admin/users/${id}`, { method:'DELETE' }).then(()=>{ toast('Deleted'); loadUsers(); }).catch(e=>toast(e.message, true));
+}
+
+// ── Tickets ──
+function loadTickets(){
+  api('/api/admin/tickets').then(list=>{
+    document.getElementById('ticketsBody').innerHTML = list.length ? list.map(t=>`
+      <tr>
+        <td>${esc(t.display_name)} <span style="color:var(--txt2)">(${esc(t.email)})</span></td>
+        <td>${esc(t.festival_name)}</td>
+        <td>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input value="${escAttr(t.claim_code||'')}" id="claim_${t.id}" style="width:120px" />
+            <button class="btn-sm" onclick="saveClaimCode(${t.id})">Save</button>
+          </div>
+        </td>
+        <td><span class="pill ${t.fulfilled?'pill-yes':'pill-no'}">${t.fulfilled?'Yes':'No'}</span></td>
+        <td>${new Date(t.won_at).toLocaleDateString()}</td>
+        <td class="actions">
+          <button class="btn-sm ${t.fulfilled?'':'btn-green'}" onclick="toggleFulfilled(${t.id}, ${t.fulfilled})">${t.fulfilled?'Mark unfulfilled':'Mark fulfilled'}</button>
+        </td>
+      </tr>
+    `).join('') : `<tr><td colspan="6" class="empty">No tickets won yet.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
+}
+
+function saveClaimCode(id){
+  const val = document.getElementById(`claim_${id}`).value.trim();
+  if(!val) return toast('Claim code cannot be empty', true);
+  api(`/api/admin/tickets/${id}/claim-code`, { method:'POST', body: JSON.stringify({ claim_code: val }) })
+    .then(()=>toast('Claim code saved')).catch(e=>toast(e.message, true));
+}
+
+function toggleFulfilled(id, current){
+  api(`/api/admin/tickets/${id}/fulfill`, { method:'POST', body: JSON.stringify({ fulfilled: !current }) })
+    .then(()=>{ toast('Updated'); loadTickets(); }).catch(e=>toast(e.message, true));
+}
+
+// ── Settings ──
+function loadSettings(){
+  api('/api/admin/settings').then(s=>{
+    document.getElementById('siteLockedToggle').classList.toggle('on', s.site_locked);
+    document.getElementById('previewKeyInput').value = s.preview_key || '';
+  }).catch(e=>toast(e.message, true));
+}
+
+function toggleSiteLocked(){
+  const on = document.getElementById('siteLockedToggle').classList.contains('on');
+  api('/api/admin/settings', { method:'POST', body: JSON.stringify({ site_locked: !on }) })
+    .then(()=>{ toast('Saved'); loadSettings(); }).catch(e=>toast(e.message, true));
+}
+
+function savePreviewKey(){
+  const key = document.getElementById('previewKeyInput').value.trim();
+  api('/api/admin/settings', { method:'POST', body: JSON.stringify({ preview_key: key }) })
+    .then(()=>toast('Preview key saved')).catch(e=>toast(e.message, true));
+}
+
+// ── Modal / utils ──
+function closeModal(){ document.getElementById('modalOverlay').classList.remove('active'); }
+document.getElementById('modalOverlay').addEventListener('click', e=>{ if(e.target.id==='modalOverlay') closeModal(); });
+
+function esc(s){ return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escAttr(s){ return esc(s).replace(/"/g,'&quot;'); }
+
+// Auto sign-in if secret already stored this session
+if(SECRET){
+  fetch('/api/admin/dashboard', { headers:{ 'x-admin-secret': SECRET } }).then(r=>{
+    if(r.ok){
+      document.getElementById('login').style.display='none';
+      document.getElementById('app').style.display='block';
+      boot();
+    } else {
+      sessionStorage.removeItem('festiq_admin_secret');
+    }
+  });
+}
+</script>
+</body>
+</html>
