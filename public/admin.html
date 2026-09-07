@@ -317,7 +317,7 @@ function loadFestivals(){
         <td><span class="pill pill-${f.status}">${esc(f.status)}</span></td>
         <td>${esc(f.location||'—')}</td>
         <td>${esc(f.event_date||'—')}</td>
-        <td>${f.entry_cost_tokens} tok</td>
+        <td>${f.entry_cost_tokens} tok${f.avg_ga_price_usd_cents ? ` · $${(f.token_price_usd_cents/100).toFixed(2)}/tok (from $${(f.avg_ga_price_usd_cents/100).toFixed(0)} GA)` : ` · $${(f.token_price_usd_cents/100).toFixed(2)}/tok (manual)`}</td>
         <td>${f.tickets_awarded}/${f.tickets_available}</td>
         <td>${f.artist_count}</td>
         <td class="actions">
@@ -361,13 +361,16 @@ function openFestivalModal(f){
         <option value="live" ${f.status==='live'?'selected':''}>Live</option>
         <option value="upcoming" ${!f.status||f.status==='upcoming'?'selected':''}>Upcoming</option>
       </select>
-      <label>Entry cost (tokens)</label>
+      <label>Entry cost (tokens/try)</label>
       <input id="f_entry_cost_tokens" type="number" min="0" value="${f.entry_cost_tokens ?? 1}" />
       <label>Tickets available</label>
       <input id="f_tickets_available" type="number" min="0" value="${f.tickets_available ?? 0}" />
       <label>Ticket prize label</label>
       <input class="full" id="f_ticket_prize_label" value="${escAttr(f.ticket_prize_label||'1 General Admission Ticket')}" />
+      <label>Avg. GA ticket price ($)</label>
+      <input id="f_avg_ga_price" type="number" min="0" step="0.01" value="${f.avg_ga_price_usd_cents ? (f.avg_ga_price_usd_cents/100).toFixed(2) : ''}" placeholder="e.g. 175.00" />
     </div>
+    <p style="font-size:11px;color:#8a8398;margin-top:-6px;">Set this and token price is auto-derived from it (roughly 45% of GA price spread across the full board) — leave blank to price tokens manually instead.</p>
     <div class="modal-actions">
       <button onclick="closeModal()">Cancel</button>
       <button class="btn-blue" onclick="saveFestival(${f.id||'null'})">${isEdit?'Save':'Create'}</button>
@@ -387,6 +390,7 @@ function saveFestival(id){
     entry_cost_tokens: Number(document.getElementById('f_entry_cost_tokens').value),
     tickets_available: Number(document.getElementById('f_tickets_available').value),
     ticket_prize_label: document.getElementById('f_ticket_prize_label').value.trim(),
+    avg_ga_price_usd_cents: document.getElementById('f_avg_ga_price').value.trim() ? Math.round(Number(document.getElementById('f_avg_ga_price').value) * 100) : null,
   };
   const req = id ? api(`/api/admin/festivals/${id}`, { method:'PUT', body: JSON.stringify(body) })
                  : api('/api/admin/festivals', { method:'POST', body: JSON.stringify(body) });

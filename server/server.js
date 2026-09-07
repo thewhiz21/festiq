@@ -108,7 +108,11 @@ app.get("/sitemap.xml", async (req, res) => {
     res.type("application/xml");
     if (siteSettings.site_locked) return res.send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`);
     const { rows: festivals } = await pool.query(`SELECT slug, status FROM festivals ORDER BY event_date ASC`);
-    const urls = [`<url><loc>${base}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>`];
+    const urls = [
+      `<url><loc>${base}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>`,
+      `<url><loc>${base}/pricing</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>`,
+      `<url><loc>${base}/faq</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>`,
+    ];
     for (const f of festivals) {
       urls.push(`<url><loc>${base}/festival/${f.slug}</loc><changefreq>daily</changefreq><priority>${f.status === "live" ? "0.9" : "0.5"}</priority></url>`);
     }
@@ -196,6 +200,50 @@ app.get("/festival/:slug", async (req, res, next) => {
   }
 });
 
+// Static SPA pages (pricing / FAQ / account) — real crawlable paths, same
+// shell as "/", with their own title/description swapped into <head> so
+// each is its own real, indexable page rather than only reachable via
+// client-side navigation from the homepage.
+const STATIC_PAGES = {
+  "/pricing": {
+    title: "Pricing — How FestiQ Tokens Work | FestiQ",
+    description: "See how FestiQ prices trivia bingo tokens off each festival's real general-admission ticket price, and check the exact token cost for every festival on the board.",
+  },
+  "/faq": {
+    title: "FAQ — FestiQ Trivia Bingo",
+    description: "Answers to common questions about how FestiQ's festival trivia bingo works: tokens, dead squares, ticket tiers, and claiming a win.",
+  },
+  "/account": {
+    title: "My Account — FestiQ",
+    description: "View your FestiQ token balance, the boards you've played, and any festival tickets you've won.",
+    noindex: true, // personal, logged-in content — nothing here to index
+  },
+};
+
+app.get(Object.keys(STATIC_PAGES), (req, res) => {
+  try {
+    const page = STATIC_PAGES[req.path];
+    const base = `${req.protocol}://${req.get("host")}`;
+    const canonical = `${base}${req.path}`;
+    const fs = require("fs");
+    let html = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8");
+    html = html
+      .replace(/<title>.*?<\/title>/, `<title>${escapeHtml(page.title)}</title>`)
+      .replace(/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${escapeHtml(page.title)}">`)
+      .replace(/<meta property="og:description"[^>]*>/, `<meta property="og:description" content="${escapeHtml(page.description)}">`)
+      .replace(/<meta name="twitter:title"[^>]*>/, `<meta name="twitter:title" content="${escapeHtml(page.title)}">`)
+      .replace(/<meta name="twitter:description"[^>]*>/, `<meta name="twitter:description" content="${escapeHtml(page.description)}">`)
+      .replace("</head>", `<meta name="description" content="${escapeHtml(page.description)}">
+<link rel="canonical" href="${canonical}">
+<meta property="og:url" content="${canonical}">
+${page.noindex ? '<meta name="robots" content="noindex, follow">' : ""}
+</head>`);
+    res.send(html);
+  } catch (err) {
+    res.status(500).send("Server error");
+  }
+});
+
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 const JWT_SECRET = process.env.JWT_SECRET || "festiq-dev-secret-change-me";
@@ -248,6 +296,33 @@ async function getOrCreateBoard(userId, festival) {
   }
   const { rows: cells } = await pool.query(`SELECT * FROM board_cells WHERE board_id = $1`, [board.id]);
   return { board, cells };
+}
+
+// Tokens should feel priced off what the show actually costs to get into,
+// not an arbitrary flat number. When a festival has an average GA ticket
+// price on file, clearing the WHOLE board (one attempt at every artist)
+// is targeted at roughly TOKEN_VALUE_PCT of that GA price — cheaper than
+// just walking in, since you still have to actually know the lineup.
+// Falls back to the festival's manually-set token_price_usd_cents when no
+// GA price has been entered yet.
+const TOKEN_VALUE_PCT = 0.45;
+const MIN_TOKEN_PRICE_CENTS = 25;
+
+function deriveTokenPriceCents(festival, artistCount) {
+  const avg = festival.avg_ga_price_usd_cents;
+  if (!avg || !artistCount) return festival.token_price_usd_cents;
+  const tokensForFullBoard = Math.max(1, artistCount * (festival.entry_cost_tokens || 1));
+  const raw = (avg * TOKEN_VALUE_PCT) / tokensForFullBoard;
+  return Math.max(MIN_TOKEN_PRICE_CENTS, Math.round(raw / 5) * 5); // round to the nearest nickel
+}
+
+function pricingFields(festival, artistCount) {
+  const tokenPriceCents = deriveTokenPriceCents(festival, artistCount);
+  return {
+    avg_ga_price_usd_cents: festival.avg_ga_price_usd_cents || null,
+    token_price_usd_cents: tokenPriceCents,
+    token_pricing_source: festival.avg_ga_price_usd_cents ? "derived" : "manual",
+  };
 }
 
 function boardPayload(festival, artists, cells, gridSize, wonTicket, linesCompleted) {
@@ -311,6 +386,7 @@ app.get("/api/festivals", async (req, res) => {
     const out = [];
     for (const f of festivals) {
       const { rows: countRows } = await pool.query(`SELECT COUNT(*) AS c FROM artists WHERE festival_id = $1`, [f.id]);
+      const lineupCount = parseInt(countRows[0].c, 10);
       out.push({
         slug: f.slug,
         name: f.name,
@@ -322,8 +398,8 @@ app.get("/api/festivals", async (req, res) => {
         tickets_available: f.tickets_available,
         tickets_awarded: f.tickets_awarded,
         entry_cost_tokens: f.entry_cost_tokens,
-        token_price_usd_cents: f.token_price_usd_cents,
-        lineup_count: parseInt(countRows[0].c, 10),
+        lineup_count: lineupCount,
+        ...pricingFields(f, lineupCount),
       });
     }
     res.json(out);
@@ -364,7 +440,7 @@ app.get("/api/festivals/:slug", async (req, res) => {
       tickets_available: festival.tickets_available,
       tickets_awarded: festival.tickets_awarded,
       entry_cost_tokens: festival.entry_cost_tokens,
-      token_price_usd_cents: festival.token_price_usd_cents,
+      ...pricingFields(festival, artists.length),
       grid_size: gridSize,
       artists: artists.map((a) => ({ id: a.id, name: a.name, genre: a.genre, set_time: a.set_time, position: a.position, difficulty: a.difficulty })),
       board,
@@ -414,6 +490,37 @@ app.post("/api/wallet/demo-buy-tokens", requireAuth, async (req, res) => {
     await pool.query(`UPDATE wallets SET tokens = tokens + $1 WHERE user_id = $2`, [quantity, req.user.id]);
     const updated = await getOrCreateWallet(req.user.id);
     res.json({ tokens: updated.tokens, demo: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Everything the "My Account" page needs in one call: profile, wallet, every
+// board the user has started (win/loss progress per festival), and every
+// ticket they've won (with claim/fulfillment status).
+app.get("/api/account", requireAuth, async (req, res) => {
+  try {
+    const wallet = await getOrCreateWallet(req.user.id);
+    const { rows: boards } = await pool.query(
+      `SELECT b.lines_completed, b.won_ticket, b.created_at, f.slug, f.name, f.banner_color, f.ticket_prize_label,
+              (SELECT COUNT(*)::int FROM board_cells bc WHERE bc.board_id = b.id AND bc.status = 'cleared') AS cleared_count,
+              (SELECT COUNT(*)::int FROM board_cells bc WHERE bc.board_id = b.id) AS total_count
+       FROM boards b JOIN festivals f ON f.id = b.festival_id
+       WHERE b.user_id = $1 ORDER BY b.created_at DESC`,
+      [req.user.id]
+    );
+    const { rows: tickets } = await pool.query(
+      `SELECT t.id, t.claim_code, t.fulfilled, t.won_at, f.slug, f.name, f.ticket_prize_label
+       FROM tickets_won t JOIN festivals f ON f.id = t.festival_id
+       WHERE t.user_id = $1 ORDER BY t.won_at DESC`,
+      [req.user.id]
+    );
+    res.json({
+      user: { email: req.user.email, display_name: req.user.display_name },
+      wallet: { tokens: wallet.tokens, last_free_claim_at: wallet.last_free_claim_at },
+      boards,
+      tickets,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -701,7 +808,7 @@ app.get("/api/admin/festivals", requireAdmin, async (req, res) => {
       GROUP BY f.id
       ORDER BY f.created_at DESC
     `);
-    res.json(rows);
+    res.json(rows.map((f) => ({ ...f, ...pricingFields(f, f.artist_count) })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -709,11 +816,11 @@ app.get("/api/admin/festivals", requireAdmin, async (req, res) => {
 
 app.post("/api/admin/festivals", requireAdmin, async (req, res) => {
   try {
-    const { slug, name, location, event_date, banner_color, entry_cost_tokens, ticket_prize_label, status, tickets_available } = req.body;
+    const { slug, name, location, event_date, banner_color, entry_cost_tokens, ticket_prize_label, status, tickets_available, avg_ga_price_usd_cents } = req.body;
     if (!slug || !name) return res.status(400).json({ error: "slug and name are required" });
     const { rows } = await pool.query(
-      `INSERT INTO festivals (slug, name, location, event_date, banner_color, entry_cost_tokens, ticket_prize_label, status, tickets_available)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      `INSERT INTO festivals (slug, name, location, event_date, banner_color, entry_cost_tokens, ticket_prize_label, status, tickets_available, avg_ga_price_usd_cents)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
       [
         slug.trim(),
         name.trim(),
@@ -724,6 +831,7 @@ app.post("/api/admin/festivals", requireAdmin, async (req, res) => {
         ticket_prize_label || "1 General Admission Ticket",
         status || "upcoming",
         tickets_available ?? 0,
+        avg_ga_price_usd_cents || null,
       ]
     );
     res.json(rows[0]);
@@ -735,7 +843,7 @@ app.post("/api/admin/festivals", requireAdmin, async (req, res) => {
 
 app.put("/api/admin/festivals/:id", requireAdmin, async (req, res) => {
   try {
-    const fields = ["slug", "name", "location", "event_date", "banner_color", "entry_cost_tokens", "ticket_prize_label", "status", "tickets_available", "tickets_awarded"];
+    const fields = ["slug", "name", "location", "event_date", "banner_color", "entry_cost_tokens", "ticket_prize_label", "status", "tickets_available", "tickets_awarded", "avg_ga_price_usd_cents"];
     const updates = fields.filter((f) => req.body[f] !== undefined);
     if (!updates.length) return res.status(400).json({ error: "No fields to update" });
     const setClause = updates.map((f, i) => `${f} = $${i + 2}`).join(", ");

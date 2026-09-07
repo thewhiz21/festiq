@@ -75,6 +75,12 @@ async function initSchema() {
     );
     ALTER TABLE boards ADD COLUMN IF NOT EXISTS lines_completed INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE festivals ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'live';
+    -- Reference average general-admission ticket price for this show, in
+    -- cents. When set, token pricing is derived from it (see
+    -- deriveTokenPriceCents in server.js) instead of the flat manual
+    -- token_price_usd_cents column, so the cost of playing always tracks
+    -- what the actual show costs to get into.
+    ALTER TABLE festivals ADD COLUMN IF NOT EXISTS avg_ga_price_usd_cents INTEGER;
 
     CREATE TABLE IF NOT EXISTS board_cells (
       board_id INTEGER NOT NULL REFERENCES boards(id),

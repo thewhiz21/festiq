@@ -116,10 +116,51 @@
   .festival-body h3{font-family:var(--display);font-size:20px;font-weight:700;margin-bottom:4px;}
   .festival-body .meta{font-size:11px;color:var(--txt2);margin-bottom:6px;}
 
-  .stat-tile{flex:1;padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;text-align:center;}
-  .stat-tile .icon{font-size:18px;margin-bottom:4px;}
-  .stat-tile .val{font-family:var(--display);font-size:24px;font-weight:800;line-height:1;}
-  .stat-tile .lbl{font-size:9px;color:var(--txt2);letter-spacing:0.1em;margin-top:4px;text-transform:uppercase;}
+  /* Wallet panel — one unified, festival-poster-styled strip (gradient wash,
+     glowing icons, soft dividers) replacing three flat identical boxes. */
+  .wallet-panel{display:flex;margin-bottom:20px;border-radius:14px;overflow:hidden;
+    background:linear-gradient(120deg, rgba(255,61,129,0.12), rgba(162,48,234,0.12) 50%, rgba(47,123,255,0.12));
+    border:1.5px solid var(--border2);box-shadow:0 6px 22px rgba(20,10,40,0.10);position:relative;}
+  .wallet-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+    background:linear-gradient(90deg,#ff3d81,#ff9d00,#ffe066,#00e5a0,#2f9bff,#a230ea);}
+  .wp-stat{flex:1;padding:18px 14px 16px;text-align:center;position:relative;}
+  .wp-stat:not(:last-child)::after{content:'';position:absolute;right:0;top:22%;bottom:22%;width:1px;background:var(--border2);}
+  .wp-icon{font-size:21px;margin-bottom:6px;display:block;filter:drop-shadow(0 0 8px rgba(255,157,0,0.4));}
+  .wp-val{font-family:var(--display);font-size:29px;font-weight:800;line-height:1;}
+  .wp-lbl{font-size:9px;color:var(--txt2);letter-spacing:0.12em;margin-top:6px;text-transform:uppercase;font-weight:700;}
+
+  /* Shared "poster panel" look for the new Pricing / FAQ / Account pages —
+     same warm-card + accent-glow language as the rest of the site. */
+  .poster-panel{background:var(--bg1);border:1.5px solid var(--border2);border-radius:12px;padding:22px 22px 24px;margin-bottom:18px;box-shadow:0 4px 16px rgba(20,10,40,0.06);position:relative;overflow:hidden;}
+  .poster-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#ff3d81,#ff9d00,#ffe066,#00e5a0,#2f9bff,#a230ea);}
+  .price-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:18px;}
+  .price-card{border:1.5px solid var(--pc-accent,var(--border2));border-radius:10px;padding:18px;background:linear-gradient(160deg, var(--pc-tint,var(--bg2)), var(--bg1) 70%);position:relative;}
+  .price-card h4{font-family:var(--display);font-size:19px;font-weight:800;margin-bottom:2px;}
+  .price-card .pc-meta{font-size:10.5px;color:var(--txt2);margin-bottom:10px;}
+  .price-card .pc-price{font-family:var(--display);font-size:26px;font-weight:800;color:var(--pc-accent,var(--gold));line-height:1;}
+  .price-card .pc-price small{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--txt2);}
+  .price-card .pc-note{font-size:10px;color:var(--txt2);margin-top:8px;}
+  .faq-item{border:1px solid var(--border2);border-radius:8px;margin-bottom:10px;overflow:hidden;background:var(--bg1);}
+  .faq-q{padding:14px 16px;font-weight:700;font-size:12.5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;user-select:none;}
+  .faq-q:hover{background:var(--bg2);}
+  .faq-q .caret{color:var(--purple);transition:transform .2s;flex-shrink:0;}
+  .faq-item.open .faq-q .caret{transform:rotate(180deg);}
+  .faq-a{max-height:0;overflow:hidden;transition:max-height .25s ease;font-size:12px;color:var(--txt2);line-height:1.6;}
+  .faq-item.open .faq-a{max-height:400px;}
+  .faq-a-inner{padding:0 16px 16px;}
+  .account-hero{display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap;}
+  .account-avatar{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:22px;font-weight:800;color:#fff;
+    background:linear-gradient(135deg,#ff3d81,#a230ea);box-shadow:0 4px 16px rgba(162,48,234,0.35);flex-shrink:0;}
+  .account-board-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--bg2);}
+  .account-board-row .ab-swatch{width:8px;align-self:stretch;border-radius:4px;flex-shrink:0;}
+  .account-board-row .ab-body{flex:1;min-width:0;}
+  .account-board-row .ab-name{font-weight:700;font-size:12.5px;}
+  .account-board-row .ab-meta{font-size:10.5px;color:var(--txt2);margin-top:2px;}
+  .ticket-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px dashed var(--gold);border-radius:8px;margin-bottom:8px;background:rgba(255,157,0,0.06);flex-wrap:wrap;}
+  .nav-links{display:flex;align-items:center;gap:16px;margin-right:4px;}
+  .nav-links a{font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--txt2);text-decoration:none;transition:color .15s;}
+  .nav-links a:hover{color:var(--pink);}
+  @media (max-width:720px){.nav-links{display:none;}}
 
   .banner-block{margin-bottom:20px;padding:14px 18px;border-radius:6px;font-size:12px;text-align:center;font-weight:700;}
   .banner-green{background:rgba(0,255,179,0.08);border:1px solid var(--green);color:var(--green);}
@@ -248,7 +289,12 @@
 
 <div class="header">
   <div class="logo" onclick="navigate('/')">FESTI<span>Q</span></div>
-  <div style="display:flex;align-items:center;gap:10px;">
+  <div style="display:flex;align-items:center;gap:14px;">
+    <div class="nav-links">
+      <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')">Pricing</a>
+      <a href="/faq" onclick="return handleFestivalLinkClick(event,'/faq')">FAQ</a>
+      <a href="/account" id="account-nav-link" onclick="return handleFestivalLinkClick(event,'/account')" style="display:none;">My Account</a>
+    </div>
     <div id="wallet-pill" class="wallet-pill" style="display:none;">🎟️ <span id="wallet-tokens">0</span> TOKENS</div>
     <button class="btn" id="auth-btn" onclick="openAuthModal()">LOG IN</button>
   </div>
@@ -311,15 +357,18 @@ function authHeaders(){ return token ? { 'Authorization': 'Bearer ' + token } : 
 function updateAuthUI(){
   const btn = document.getElementById('auth-btn');
   const pill = document.getElementById('wallet-pill');
+  const acctLink = document.getElementById('account-nav-link');
   if (user) {
     btn.textContent = user.display_name.toUpperCase() + ' — LOG OUT';
     btn.onclick = logout;
     pill.style.display = 'flex';
+    if (acctLink) acctLink.style.display = 'inline';
     refreshWallet();
   } else {
     btn.textContent = 'LOG IN';
     btn.onclick = openAuthModal;
     pill.style.display = 'none';
+    if (acctLink) acctLink.style.display = 'none';
   }
 }
 
@@ -413,6 +462,9 @@ function render(){
   }
   const path = window.location.pathname;
   if (path.startsWith('/festival/')) renderFestival(decodeURIComponent(path.slice('/festival/'.length)));
+  else if (path === '/pricing') renderPricing();
+  else if (path === '/faq') renderFAQ();
+  else if (path === '/account') renderAccount();
   else renderList();
 }
 
@@ -622,6 +674,176 @@ function renderList(){
   });
 }
 
+// ─── Pricing page ───────────────────────────────────────────────────────────
+// Explains the token model in plain terms, then lists every live festival's
+// real derived price (or manual price, for festivals with no GA figure on
+// file yet) so nothing about cost is a mystery.
+function renderPricing(){
+  clearDemoTimers();
+  document.title = 'Pricing — How FestiQ Tokens Work | FestiQ';
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <a href="/" onclick="return handleFestivalLinkClick(event,'/')" class="backlink">← ALL FESTIVALS</a>
+    <div class="hero" style="margin-top:10px;">
+      <div class="eyebrow">Pricing</div>
+      <h1>TOKENS, PRICED OFF <span style="color:var(--gold);">THE REAL SHOW</span></h1>
+      <p>Every festival's token price is tied to what a general admission ticket to that exact show actually costs — not a flat number we picked. The harder the ticket, the more a token's worth; the more accessible the show, the cheaper it is to keep swinging.</p>
+    </div>
+
+    <div class="poster-panel">
+      <div class="section-label" style="margin-bottom:14px;">How the math works</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">
+        <div style="text-align:center;">
+          <div style="font-size:26px;margin-bottom:6px;">🎫</div>
+          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">1. We take the GA price</div>
+          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">The average general-admission ticket price for that specific festival.</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:26px;margin-bottom:6px;">✂️</div>
+          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">2. Discount it ~55%</div>
+          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">Clearing the whole board should cost noticeably less than the ticket itself — you still have to actually know the lineup.</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:26px;margin-bottom:6px;">🧮</div>
+          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">3. Split across the board</div>
+          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">That discounted total is divided across every square, at that show's tokens-per-try — giving one token's real price.</div>
+        </div>
+      </div>
+      <div style="text-align:center;font-size:10.5px;color:var(--txt3);margin-top:16px;">Festivals without a GA price on file yet fall back to a flat manual price until one is set.</div>
+    </div>
+
+    <div class="section-label">Token Price By Festival</div>
+    <div class="price-grid" id="pricing-grid"><div class="empty">Loading…</div></div>
+
+    <div class="footer-note">FestiQ — a prototype. Real ticket sourcing &amp; payments not wired up yet.</div>
+  `;
+  fetch(`${API}/api/festivals`).then(r => r.json()).then(list => {
+    const grid = document.getElementById('pricing-grid');
+    if (!list.length) { grid.innerHTML = '<div class="empty">No festivals yet.</div>'; return; }
+    const sorted = [...list].sort((a, b) => parseFestivalDate(a.event_date) - parseFestivalDate(b.event_date));
+    grid.innerHTML = sorted.map(f => {
+      const acc = f.banner_color || 'var(--purple)';
+      const derived = f.token_pricing_source === 'derived';
+      return `
+      <a class="price-card" href="/festival/${f.slug}" onclick="return handleFestivalLinkClick(event,'/festival/${f.slug}')" style="text-decoration:none;color:inherit;--pc-accent:${acc};--pc-tint:${acc}14;">
+        <h4>${f.name}</h4>
+        <div class="pc-meta">${f.location || ''}${f.event_date ? ' · ' + f.event_date : ''}</div>
+        <div class="pc-price">$${(f.token_price_usd_cents/100).toFixed(2)} <small>/ token</small></div>
+        <div class="pc-note">🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens===1?'':'s'} per try${f.lineup_count ? ` · ${f.lineup_count} artists` : ''}</div>
+        <div class="pc-note">${derived ? `Derived from a $${(f.avg_ga_price_usd_cents/100).toFixed(0)} average GA ticket` : 'Manually priced — GA data not on file yet'}</div>
+      </a>`;
+    }).join('');
+  });
+}
+
+// ─── FAQ page ───────────────────────────────────────────────────────────────
+function faqToggle(el){
+  el.parentElement.classList.toggle('open');
+}
+const FAQ_ITEMS = [
+  ["How do I actually win a ticket?", "Pick a festival, pick any artist on the board, and answer their trivia. Get it right and that square clears; get it wrong and it's dead for good — no retries. Clear a full row, column, or diagonal (like bingo) and you win a real ticket to that show."],
+  ["What happens if I get a question wrong?", "That artist's square is dead for your board, permanently. It's hard on purpose — this isn't a random draw, it rewards actually knowing the lineup. If no line can ever be completed anymore, your board is busted and it's game over for that festival."],
+  ["What are tokens, and why do they cost money?", `A token buys one attempt at one artist's trivia. Token price is tied to that festival's real general-admission ticket price — see the <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')" style="color:var(--purple);font-weight:700;">Pricing page</a> for the exact math. Every new account also gets a free token to try the mechanic before spending anything.`],
+  ["Can I get more than one ticket per festival?", "Yes — most boards support up to 2 ticket tiers. Land your first line and you win one ticket; if a second, non-overlapping line is still reachable on your board, landing that wins a second."],
+  ["What if the festival isn't live yet?", "You can still open the room and see the full board and lineup — it's just locked (grayed out, no clicks) until FestiQ flips it live closer to the event. If a festival has no lineup entered at all yet, you'll see a simple \"check back soon\" page instead."],
+  ["How do I actually claim a real ticket after winning?", `FestiQ generates a claim code for your win, visible on your <a href="/account" onclick="return handleFestivalLinkClick(event,'/account')" style="color:var(--purple);font-weight:700;">My Account</a> page. Our team follows up to fulfill it — ticket sourcing and fulfillment are still being built out, so treat this as an early prototype rather than a finished storefront.`],
+  ["Is this luck-based, like a raffle?", "No. There's no random draw — every question is about the actual artist on that square, and every wrong answer permanently costs you that square. Knowing the lineup is the entire game."],
+  ["Do tokens or progress carry over between festivals?", "Tokens are shared across your whole account and work at any festival. Board progress (which squares are cleared or dead) is separate per festival, since each one has its own lineup and board."],
+];
+function renderFAQ(){
+  clearDemoTimers();
+  document.title = 'FAQ — FestiQ Trivia Bingo';
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <a href="/" onclick="return handleFestivalLinkClick(event,'/')" class="backlink">← ALL FESTIVALS</a>
+    <div class="hero" style="margin-top:10px;">
+      <div class="eyebrow">Frequently Asked</div>
+      <h1>QUESTIONS ABOUT <span style="color:var(--purple);">PLAYING FESTIQ</span></h1>
+      <p>Everything about how the board, tokens, and ticket prizes work.</p>
+    </div>
+    <div class="poster-panel" style="padding:14px;">
+      ${FAQ_ITEMS.map(([q, a], i) => `
+        <div class="faq-item" id="faq-${i}">
+          <div class="faq-q" onclick="faqToggle(this)">${q} <span class="caret">▾</span></div>
+          <div class="faq-a"><div class="faq-a-inner">${a}</div></div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="footer-note">Still have a question? Reach out and we'll get back to you.</div>
+  `;
+}
+
+// ─── My Account page ────────────────────────────────────────────────────────
+function renderAccount(){
+  clearDemoTimers();
+  document.title = 'My Account — FestiQ';
+  const app = document.getElementById('app');
+  if (!user) {
+    app.innerHTML = `
+      <a href="/" onclick="return handleFestivalLinkClick(event,'/')" class="backlink">← ALL FESTIVALS</a>
+      <div style="text-align:center;margin:60px 0;">
+        <div style="font-family:var(--display);font-size:28px;font-weight:800;margin-bottom:10px;">Log in to see your account</div>
+        <div style="font-size:12.5px;color:var(--txt2);margin-bottom:18px;">Your tokens, boards, and any tickets you've won live here.</div>
+        <button class="btn btn-purple" onclick="openAuthModal()">LOG IN →</button>
+      </div>
+    `;
+    return;
+  }
+  app.innerHTML = `
+    <a href="/" onclick="return handleFestivalLinkClick(event,'/')" class="backlink">← ALL FESTIVALS</a>
+    <div class="account-hero" style="margin-top:14px;">
+      <div class="account-avatar">${(user.display_name||'?').slice(0,1).toUpperCase()}</div>
+      <div>
+        <div style="font-family:var(--display);font-size:26px;font-weight:800;line-height:1;">${user.display_name}</div>
+        <div style="font-size:11px;color:var(--txt2);margin-top:4px;">${user.email || ''}</div>
+      </div>
+    </div>
+    <div id="account-body"><div class="empty">Loading your account…</div></div>
+  `;
+  fetch(`${API}/api/account`, { headers: authHeaders() }).then(r => r.json()).then(d => {
+    if (d.error) { document.getElementById('account-body').innerHTML = `<div class="empty">${d.error}</div>`; return; }
+    const body = document.getElementById('account-body');
+    body.innerHTML = `
+      <div class="wallet-panel">
+        <div class="wp-stat"><span class="wp-icon">🎟️</span><div class="wp-val" style="color:var(--gold);">${d.wallet.tokens}</div><div class="wp-lbl">Tokens</div></div>
+        <div class="wp-stat"><span class="wp-icon">🎯</span><div class="wp-val" style="color:var(--blue);">${d.boards.length}</div><div class="wp-lbl">Boards Played</div></div>
+        <div class="wp-stat"><span class="wp-icon">🏆</span><div class="wp-val" style="color:var(--green);">${d.tickets.length}</div><div class="wp-lbl">Tickets Won</div></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
+        <button class="btn btn-gold" style="flex:1;min-width:180px;" onclick="claimFreeToken()">🎁 CLAIM FREE TOKEN</button>
+        <button class="btn btn-purple" style="flex:1;min-width:180px;" onclick="demoBuyTokens(5)">+5 TOKENS (DEMO)</button>
+      </div>
+
+      ${d.tickets.length ? `
+      <div class="section-label">Tickets Won</div>
+      ${d.tickets.map(t => `
+        <div class="ticket-row">
+          <div>
+            <div style="font-weight:800;font-size:12.5px;">${t.name}</div>
+            <div style="font-size:10.5px;color:var(--txt2);">${t.ticket_prize_label} · claim code <code style="color:var(--gold);font-weight:700;">${t.claim_code}</code></div>
+          </div>
+          <span class="tag ${t.fulfilled ? 'tag-live' : 'tag-upcoming'}">${t.fulfilled ? 'Fulfilled' : 'Pending Fulfillment'}</span>
+        </div>
+      `).join('')}` : ''}
+
+      <div class="section-label">Your Boards</div>
+      ${d.boards.length ? d.boards.map(b => `
+        <a href="/festival/${b.slug}" onclick="return handleFestivalLinkClick(event,'/festival/${b.slug}')" style="text-decoration:none;color:inherit;">
+          <div class="account-board-row">
+            <div class="ab-swatch" style="background:${b.banner_color || 'var(--purple)'};"></div>
+            <div class="ab-body">
+              <div class="ab-name">${b.name}</div>
+              <div class="ab-meta">✅ ${b.cleared_count}/${b.total_count} cleared · 🏆 ${b.lines_completed} line${b.lines_completed===1?'':'s'} won</div>
+            </div>
+          </div>
+        </a>
+      `).join('') : `<div class="empty">You haven't started a board yet — pick a festival and jump in.</div>`}
+
+      <div class="footer-note">FestiQ — a prototype. Real ticket sourcing &amp; payments not wired up yet.</div>
+    `;
+  });
+}
+
 // Small static illustration of what "1 line" vs "2 lines" looks like on
 // this festival's actual board size — same idea as PropQuix Solo's
 // TierExplainer mini-boards, drawn with plain divs instead of React.
@@ -724,11 +946,12 @@ function renderFestival(slug){
       ${isLive && linesCompleted >= 1 ? `<div class="banner-block banner-gold">🎉 You've won ${linesCompleted} ticket${linesCompleted === 1 ? '' : 's'} on this board! ${linesCompleted < maxTiers ? 'Keep going for another line.' : 'Max tickets reached — board complete.'}</div>` : ''}
 
       ${isLive ? `
-      <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
-        <div class="stat-tile"><div class="icon">🎟️</div><div class="val" style="color:var(--gold);" id="wallet-stat">${user ? '—' : '—'}</div><div class="lbl">Tokens</div></div>
-        <div class="stat-tile"><div class="icon">✅</div><div class="val" style="color:var(--green);">${clearedCount}/${cells.length}</div><div class="lbl">Cleared</div></div>
-        <div class="stat-tile"><div class="icon">🏆</div><div class="val" style="color:var(--gold);">${linesCompleted}/${maxTiers}</div><div class="lbl">Tickets Won</div></div>
+      <div class="wallet-panel">
+        <div class="wp-stat"><span class="wp-icon">🎟️</span><div class="wp-val" style="color:var(--gold);" id="wallet-stat">${user ? '—' : '—'}</div><div class="wp-lbl">Tokens</div></div>
+        <div class="wp-stat"><span class="wp-icon">✅</span><div class="wp-val" style="color:var(--green);">${clearedCount}/${cells.length}</div><div class="wp-lbl">Cleared</div></div>
+        <div class="wp-stat"><span class="wp-icon">🏆</span><div class="wp-val" style="color:var(--gold);">${linesCompleted}/${maxTiers}</div><div class="wp-lbl">Tickets Won</div></div>
       </div>
+      <div style="text-align:center;font-size:10px;color:var(--txt2);margin:-12px 0 16px;">🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens===1?'':'s'}/try${f.token_price_usd_cents ? ` · ~$${(f.token_price_usd_cents/100).toFixed(2)}/token` : ''} — <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')" style="color:var(--purple);font-weight:700;">how pricing works →</a></div>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
         ${user ? `<button class="btn btn-gold" style="flex:1;min-width:180px;" onclick="claimFreeToken()">🎁 CLAIM FREE TOKEN</button>
