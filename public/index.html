@@ -124,16 +124,32 @@
   .banner-red{background:rgba(255,51,85,0.08);border:2px solid var(--red);color:var(--red);}
 
   .board-grid{display:grid;gap:10px;margin-bottom:16px;}
-  .artist-box{position:relative;aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px;cursor:pointer;transition:border-color .15s,transform .1s,opacity .2s,filter .2s;background:var(--bg1);border:1px solid var(--border2);}
-  .artist-box:hover{transform:translateY(-2px);}
-  .artist-box.cleared{background:rgba(0,255,179,0.1);border-color:var(--green);cursor:default;opacity:0.9;}
-  .artist-box.dead{background:rgba(255,51,85,0.07);border-color:var(--red);cursor:default;opacity:0.55;}
-  .artist-box.inline{box-shadow:0 0 0 1px var(--gold),0 0 14px rgba(255,213,79,0.25);border-color:var(--gold)!important;}
-  .artist-box.dimmed{opacity:0.3;filter:grayscale(0.7);}
-  .artist-box .icon{font-size:18px;margin-bottom:4px;}
+  @keyframes breathe{0%,100%{box-shadow:0 0 0 1px var(--box-accent,var(--border2)),0 0 0 rgba(0,0,0,0);}50%{box-shadow:0 0 0 1px var(--box-accent,var(--border2)),0 0 16px 1px var(--box-glow,rgba(162,48,234,0.18));}}
+  @keyframes stampIn{0%{transform:scale(2.2) rotate(-14deg);opacity:0;}60%{transform:scale(0.92) rotate(-4deg);opacity:1;}100%{transform:scale(1) rotate(-8deg);opacity:1;}}
+  @keyframes deadShake{0%,100%{transform:translateX(0);}20%{transform:translateX(-3px) rotate(-1deg);}40%{transform:translateX(3px) rotate(1deg);}60%{transform:translateX(-2px);}80%{transform:translateX(2px);}}
+  .artist-box{position:relative;aspect-ratio:1;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px;cursor:pointer;transition:border-color .15s,transform .12s,opacity .2s,filter .2s,box-shadow .2s;background:var(--bg1);border:1px solid var(--box-accent,var(--border2));overflow:hidden;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both,breathe 2.8s ease-in-out infinite;}
+  .artist-box::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--box-accent,var(--purple));opacity:0.8;}
+  .artist-box:hover{transform:translateY(-3px) scale(1.02);}
+  .artist-box.cleared{background:linear-gradient(160deg,rgba(0,255,179,0.14),rgba(0,255,179,0.04));border-color:var(--green);cursor:default;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both;}
+  .artist-box.cleared::before{background:var(--green);opacity:1;}
+  .artist-box.dead{background:repeating-linear-gradient(135deg,rgba(255,51,85,0.09),rgba(255,51,85,0.09) 6px,rgba(255,51,85,0.03) 6px,rgba(255,51,85,0.03) 12px);border-color:var(--red);cursor:default;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both,deadShake .4s ease-in-out 1;filter:grayscale(0.55);}
+  .artist-box.dead::before{background:var(--red);opacity:1;}
+  .artist-box.inline{box-shadow:0 0 0 2px var(--gold),0 0 16px rgba(255,213,79,0.3)!important;border-color:var(--gold)!important;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both;}
+  .artist-box.dimmed{opacity:0.3;filter:grayscale(0.7);animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both;}
+  .artist-box .logo-badge{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:13px;color:#fff;margin-bottom:5px;background:var(--box-accent,var(--purple));box-shadow:0 2px 6px rgba(20,10,40,0.18);flex-shrink:0;}
+  .artist-box.dead .logo-badge{filter:grayscale(1);opacity:0.6;}
+  .artist-box .status-stamp{position:absolute;top:4px;right:4px;font-size:15px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.2));}
+  .artist-box.cleared .status-stamp{animation:stampIn .4s cubic-bezier(0.16,1,0.3,1) both;}
+  .artist-box.dead .status-stamp{animation:stampIn .4s cubic-bezier(0.16,1,0.3,1) both;}
   .artist-box .name{font-family:var(--display);font-size:13px;font-weight:700;line-height:1.2;}
+  .artist-box.dead .name{text-decoration:line-through;color:var(--txt2);}
   .artist-box .genre{font-size:9px;color:var(--txt2);margin-top:3px;}
-  .artist-box .tagline{margin-top:4px;font-size:8.5px;font-weight:700;letter-spacing:0.06em;color:var(--txt2);}
+  .artist-box .tagline{margin-top:4px;font-size:8.5px;font-weight:800;letter-spacing:0.06em;color:var(--txt2);padding:2px 7px;border-radius:10px;}
+  .artist-box.cleared .tagline{color:var(--green);background:rgba(0,255,179,0.14);}
+  .artist-box.dead .tagline{color:var(--red);background:rgba(255,51,85,0.12);}
+  .board-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:10.5px;color:var(--txt2);font-weight:600;}
+  .board-legend span{display:inline-flex;align-items:center;gap:5px;}
+  .board-legend .lg-dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
 
   .demo-block{padding:18px 18px 20px;background:var(--bg1);border:1px solid var(--border2);border-radius:8px;margin-bottom:24px;transition:border-color .3s;}
   .demo-cell{aspect-ratio:1;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .2s;border:1px solid var(--border2);background:var(--bg2);color:var(--txt2);}
@@ -685,8 +701,13 @@ function renderFestival(slug){
                : `<button class="btn btn-purple" style="flex:1;" onclick="openAuthModal()">LOG IN TO PLAY →</button>`}
       </div>
 
-      <div style="font-size:11px;color:var(--txt2);letter-spacing:0.1em;font-weight:600;margin-bottom:12px;text-transform:uppercase;">
+      <div style="font-size:11px;color:var(--txt2);letter-spacing:0.1em;font-weight:600;margin-bottom:10px;text-transform:uppercase;">
         The board — 🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist, one shot each
+      </div>
+      <div class="board-legend">
+        <span><span class="lg-dot" style="background:var(--purple);"></span>${cells.filter(c => c.status === 'available').length} available — tap to play</span>
+        <span><span class="lg-dot" style="background:var(--green);"></span>${clearedCount} cleared</span>
+        <span><span class="lg-dot" style="background:var(--red);"></span>${cells.filter(c => c.status === 'dead').length} dead — no retry</span>
       </div>
       <div class="board-grid" id="board-grid" style="grid-template-columns:repeat(${f.grid_size},1fr);"></div>
       <div class="footer-note">Entry costs ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist attempt. Fail and that artist is dead for this board — no retries.</div>
@@ -705,19 +726,43 @@ function renderFestival(slug){
   });
 }
 
+// Deterministic per-artist "logo" — real band logos aren't ours to use, so
+// each artist gets a consistent monogram badge (initials + a hashed hue)
+// that acts like a real identity mark instead of a generic mic icon for
+// every single box.
+function hashHue(str){
+  let h = 0;
+  for (let i = 0; i < (str || '').length; i++) { h = (h * 31 + str.charCodeAt(i)) >>> 0; }
+  return h % 360;
+}
+function artistInitials(name){
+  const words = (name || '?').trim().split(/\s+/).filter(Boolean);
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+}
+function artistAccent(name){
+  const hue = hashHue(name);
+  return { accent: `hsl(${hue},70%,52%)`, glow: `hsla(${hue},85%,60%,0.35)` };
+}
+
 function renderBoardGrid(cells, gridSize){
   const grid = document.getElementById('board-grid');
   const sorted = [...cells].sort((a,b) => a.position - b.position);
-  grid.innerHTML = sorted.map(c => `
-    <div class="artist-box ${c.status}" data-pos="${c.position}"
+  grid.innerHTML = sorted.map((c, i) => {
+    const { accent, glow } = artistAccent(c.name);
+    const stamp = c.status === 'cleared' ? '✅' : c.status === 'dead' ? '💀' : '';
+    return `
+    <div class="artist-box ${c.status}" data-pos="${c.position}" style="--box-accent:${accent};--box-glow:${glow};animation-delay:${Math.min(i * 35, 400)}ms;"
          onmouseenter="hoverLine(${c.position}, ${gridSize})" onmouseleave="clearHoverLine()"
          onclick="handleBoxClick(${c.artist_id}, '${c.status}')">
-      <div class="icon">${c.status === 'cleared' ? '✅' : c.status === 'dead' ? '💀' : '🎤'}</div>
+      ${stamp ? `<div class="status-stamp">${stamp}</div>` : ''}
+      <div class="logo-badge" style="background:${c.status === 'dead' ? 'var(--txt3)' : accent};">${artistInitials(c.name)}</div>
       <div class="name">${c.name}</div>
       <div class="genre">${c.genre || ''}</div>
-      <div class="tagline">${c.status === 'cleared' ? 'CLEARED' : c.status === 'dead' ? 'DEAD' : 'PLAY →'}</div>
+      <div class="tagline">${c.status === 'cleared' ? 'CLEARED' : c.status === 'dead' ? 'DEAD — NO RETRY' : 'PLAY →'}</div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // Hover a cell → highlight its full row/column (mirrors PropQuix's board hover)
