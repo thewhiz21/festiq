@@ -195,6 +195,16 @@
   .artist-box.locked{cursor:default!important;filter:grayscale(0.85);opacity:0.62;background:var(--bg2)!important;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both!important;}
   .artist-box.locked:hover{transform:none;box-shadow:none;}
   .artist-box.locked .tagline{color:var(--txt2);background:rgba(20,10,40,0.06);}
+  /* Lineup not announced yet — a "mystery box" placeholder, not a dead or
+     locked square: dashed border + a slow shimmer sweep to read as
+     anticipation ("something's coming") rather than unavailable. */
+  .artist-box.pending{cursor:default!important;background:var(--bg2)!important;border-style:dashed!important;border-color:var(--border2)!important;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both!important;}
+  .artist-box.pending::before{display:none;}
+  .artist-box.pending:hover{transform:none;box-shadow:none;}
+  .artist-box.pending .logo-badge{background:var(--bg1)!important;border:2px dashed var(--border2);box-shadow:none;color:var(--txt3);position:relative;overflow:hidden;}
+  .artist-box.pending .logo-badge::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,0.7) 50%,transparent 70%);animation:shimmer 2.6s linear infinite;}
+  .artist-box.pending .name{color:var(--txt3);}
+  .artist-box.pending .tagline{color:var(--purple);background:rgba(162,48,234,0.08);}
   .artist-box .logo-badge{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:14px;color:#fff;margin-bottom:5px;background:var(--box-accent,var(--purple));box-shadow:0 3px 8px rgba(20,10,40,0.22),0 0 0 3px #fff;flex-shrink:0;}
   .artist-box.dead .logo-badge{filter:grayscale(1);opacity:0.6;}
   .artist-box .status-stamp{position:absolute;top:4px;right:4px;font-size:15px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.2));}
@@ -971,21 +981,39 @@ function renderFestival(slug){
     document.title = `${f.name} Trivia Bingo — ${isLive ? 'Win ' + f.name + ' Tickets' : 'Coming Soon'} | FestiQ`;
     const eventCd = daysHoursUntil(f.event_date);
 
-    // A festival with no lineup entered yet has nothing to show as a board —
-    // that's the only case that still gets the bare "check back soon" page.
-    // Once artists exist, the room opens even before the festival goes
-    // live: same board, same lineup, just locked (grayed out, no clicks,
-    // no wallet) until FestiQ flips it live.
+    // A festival with no lineup entered yet still gets the real room — full
+    // hero, prize-tier explainer, and the actual board grid at its eventual
+    // size — just with every square a dashed "TBA" mystery box instead of a
+    // real artist. Seeing the room take shape (and knowing how big the board
+    // will be) beats a bare "check back soon" line.
     if (!f.artists || !f.artists.length) {
+      const pendingCells = Array.from({ length: f.grid_size * f.grid_size }, (_, i) => ({ position: i, status: 'pending' }));
       app.innerHTML = `
         <a href="/" onclick="return handleFestivalLinkClick(event,'/')" class="backlink">← ALL FESTIVALS</a>
-        <div style="text-align:center;margin:60px 0;">
+        <div style="text-align:center;margin:18px 0 20px;">
           <div style="font-size:10px;color:var(--purple);letter-spacing:0.16em;font-weight:800;margin-bottom:6px;text-transform:uppercase;">Festival Trivia Bingo</div>
-          <div class="eyebrow" style="font-size:10px;color:var(--txt2);letter-spacing:0.14em;font-weight:700;margin-bottom:8px;text-transform:uppercase;">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
-          <div style="font-family:var(--display);font-size:32px;font-weight:800;line-height:1;margin-bottom:12px;">${f.name}</div>
-          <div style="font-size:12.5px;color:var(--txt2);">Lineup and trivia board drop closer to the date. Check back soon.</div>
+          <div class="eyebrow" style="font-size:10px;color:var(--gold);letter-spacing:0.14em;font-weight:700;margin-bottom:8px;text-transform:uppercase;">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
+          <div style="font-family:var(--display);font-size:36px;font-weight:800;line-height:1;margin-bottom:8px;">${f.name}</div>
+          <div style="font-size:12.5px;color:var(--txt2);max-width:520px;margin:0 auto 12px;">The lineup isn't announced yet — once it drops, every square below fills in with a real artist to challenge.</div>
+          ${eventCd ? `<div style="display:flex;justify-content:center;">${countdownHTML(f.event_date)}</div>` : ''}
         </div>
+
+        <div class="banner-block" style="background:rgba(162,48,234,0.06);border:2px dashed var(--purple);color:var(--purple);">🎪 LINEUP COMING SOON — check back closer to ${f.event_date || 'the event'} to see who's playing.</div>
+
+        ${tierExplainerHTML(f)}
+
+        <div class="section-label">Full Lineup</div>
+        <div class="lineup-poster">
+          <span class="lineup-chip" style="opacity:0.55;">🎫 Lineup announcement coming soon</span>
+        </div>
+
+        <div style="font-size:11px;color:var(--txt2);letter-spacing:0.1em;font-weight:600;margin-bottom:10px;text-transform:uppercase;">
+          The board — ${f.grid_size}×${f.grid_size}, lineup TBA
+        </div>
+        <div class="board-grid" id="board-grid" style="grid-template-columns:repeat(${f.grid_size},1fr);"></div>
+        <div class="footer-note">Once the lineup is announced, each square becomes a real artist you can challenge for ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} a try.</div>
       `;
+      renderBoardGrid(pendingCells, f.grid_size, false);
       return;
     }
 
@@ -1083,6 +1111,19 @@ function renderBoardGrid(cells, gridSize, locked){
   const grid = document.getElementById('board-grid');
   const sorted = [...cells].sort((a,b) => a.position - b.position);
   grid.innerHTML = sorted.map((c, i) => {
+    // Lineup not announced yet — a dashed "mystery box" placeholder instead
+    // of a real artist card. No accent color to hash (there's no name yet),
+    // no click/hover handlers, no status stamp.
+    if (c.status === 'pending') {
+      return `
+      <div class="artist-box pending" data-pos="${c.position}" style="animation-delay:${Math.min(i * 35, 400)}ms;">
+        <div class="logo-badge">🎫</div>
+        <div class="name">TBA</div>
+        <div class="genre">&nbsp;</div>
+        <div class="tagline">COMING SOON</div>
+      </div>
+    `;
+    }
     const { accent, glow, tint } = artistAccent(c.name);
     const stamp = c.status === 'cleared' ? '✅' : c.status === 'dead' ? '💀' : '';
     const handlers = locked ? '' : `onmouseenter="hoverLine(${c.position}, ${gridSize})" onmouseleave="clearHoverLine()" onclick="handleBoxClick(${c.artist_id}, '${c.status}')"`;
