@@ -298,31 +298,26 @@ async function getOrCreateBoard(userId, festival) {
   return { board, cells };
 }
 
-// Tokens should feel priced off what the show actually costs to get into,
-// not an arbitrary flat number. When a festival has an average GA ticket
-// price on file, clearing the WHOLE board (one attempt at every artist)
-// is targeted at roughly TOKEN_VALUE_PCT of that GA price — cheaper than
-// just walking in, since you still have to actually know the lineup.
-// Falls back to the festival's manually-set token_price_usd_cents when no
-// GA price has been entered yet.
-const TOKEN_VALUE_PCT = 0.45;
-const MIN_TOKEN_PRICE_CENTS = 25;
+// ─── Token economy ──────────────────────────────────────────────────────────
+// Carnival-token model: like buying a stack of tokens at Chuck E. Cheese,
+// what a TOKEN costs in real money is a single sitewide question (answered
+// by the token packs in /api/wallet/demo-buy-tokens's frontend, all priced
+// off TOKEN_REFERENCE_VALUE_CENTS) — never something a player has to work
+// out per festival while they're mid-game. What DOES vary per festival is
+// how many tokens one attempt costs (entry_cost_tokens), the same way some
+// arcade games cost 1 token and others cost 3. That number is a plain admin
+// field; when an average GA ticket price is on file, suggestEntryCostTokens
+// gives the admin panel a suggested value scaled to that show's real prize
+// value, but it's never recomputed on the fly for players — it's just the
+// festival's entry_cost_tokens column, same as any other setting.
+const TOKEN_REFERENCE_VALUE_CENTS = 40; // internal accounting constant only — never shown to players
+const TOKEN_VALUE_PCT = 0.45; // clearing a full board should cost well under the GA ticket itself
 
-function deriveTokenPriceCents(festival, artistCount) {
-  const avg = festival.avg_ga_price_usd_cents;
-  if (!avg || !artistCount) return festival.token_price_usd_cents;
-  const tokensForFullBoard = Math.max(1, artistCount * (festival.entry_cost_tokens || 1));
-  const raw = (avg * TOKEN_VALUE_PCT) / tokensForFullBoard;
-  return Math.max(MIN_TOKEN_PRICE_CENTS, Math.round(raw / 5) * 5); // round to the nearest nickel
-}
-
-function pricingFields(festival, artistCount) {
-  const tokenPriceCents = deriveTokenPriceCents(festival, artistCount);
-  return {
-    avg_ga_price_usd_cents: festival.avg_ga_price_usd_cents || null,
-    token_price_usd_cents: tokenPriceCents,
-    token_pricing_source: festival.avg_ga_price_usd_cents ? "derived" : "manual",
-  };
+function suggestEntryCostTokens(avgGaPriceCents, artistCount) {
+  if (!avgGaPriceCents || !artistCount) return null;
+  const budgetCents = avgGaPriceCents * TOKEN_VALUE_PCT;
+  const tokensForFullBoard = budgetCents / TOKEN_REFERENCE_VALUE_CENTS;
+  return Math.max(1, Math.round(tokensForFullBoard / artistCount));
 }
 
 function boardPayload(festival, artists, cells, gridSize, wonTicket, linesCompleted) {
@@ -398,8 +393,8 @@ app.get("/api/festivals", async (req, res) => {
         tickets_available: f.tickets_available,
         tickets_awarded: f.tickets_awarded,
         entry_cost_tokens: f.entry_cost_tokens,
+        avg_ga_price_usd_cents: f.avg_ga_price_usd_cents || null,
         lineup_count: lineupCount,
-        ...pricingFields(f, lineupCount),
       });
     }
     res.json(out);
@@ -440,7 +435,7 @@ app.get("/api/festivals/:slug", async (req, res) => {
       tickets_available: festival.tickets_available,
       tickets_awarded: festival.tickets_awarded,
       entry_cost_tokens: festival.entry_cost_tokens,
-      ...pricingFields(festival, artists.length),
+      avg_ga_price_usd_cents: festival.avg_ga_price_usd_cents || null,
       grid_size: gridSize,
       artists: artists.map((a) => ({ id: a.id, name: a.name, genre: a.genre, set_time: a.set_time, position: a.position, difficulty: a.difficulty })),
       board,
@@ -486,7 +481,7 @@ app.post("/api/wallet/claim-free", requireAuth, async (req, res) => {
 // same pattern as PropQuix's solo token packs.
 app.post("/api/wallet/demo-buy-tokens", requireAuth, async (req, res) => {
   try {
-    const quantity = Math.max(1, Math.min(20, parseInt(req.body?.quantity) || 1));
+    const quantity = Math.max(1, Math.min(500, parseInt(req.body?.quantity) || 1));
     await pool.query(`UPDATE wallets SET tokens = tokens + $1 WHERE user_id = $2`, [quantity, req.user.id]);
     const updated = await getOrCreateWallet(req.user.id);
     res.json({ tokens: updated.tokens, demo: true });
@@ -808,7 +803,7 @@ app.get("/api/admin/festivals", requireAdmin, async (req, res) => {
       GROUP BY f.id
       ORDER BY f.created_at DESC
     `);
-    res.json(rows.map((f) => ({ ...f, ...pricingFields(f, f.artist_count) })));
+    res.json(rows.map((f) => ({ ...f, suggested_entry_cost_tokens: suggestEntryCostTokens(f.avg_ga_price_usd_cents, f.artist_count) })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -157,6 +157,18 @@
   .account-board-row .ab-name{font-weight:700;font-size:12.5px;}
   .account-board-row .ab-meta{font-size:10.5px;color:var(--txt2);margin-top:2px;}
   .ticket-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px dashed var(--gold);border-radius:8px;margin-bottom:8px;background:rgba(255,157,0,0.06);flex-wrap:wrap;}
+  /* Token Shop — carnival ticket-counter packs. Dollar price is the ONLY
+     place money shows up; everywhere else (mid-game) only token counts
+     appear, so playing never feels like doing checkout math. */
+  .pack-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:16px;}
+  .pack-card{position:relative;border:2px solid var(--pk-accent,var(--border2));border-radius:12px;padding:16px 12px 14px;text-align:center;cursor:pointer;background:linear-gradient(160deg, var(--pk-tint,var(--bg2)), var(--bg1) 75%);transition:transform .15s;}
+  .pack-card:hover{transform:translateY(-3px);}
+  .pack-card .pk-badge{position:absolute;top:-10px;left:50%;transform:translateX(-50%);font-size:8.5px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;background:var(--pk-accent,var(--purple));color:#fff;padding:3px 10px;border-radius:20px;white-space:nowrap;}
+  .pack-card .pk-tokens{font-family:var(--display);font-size:30px;font-weight:800;line-height:1;color:var(--pk-accent,var(--purple));margin-top:6px;}
+  .pack-card .pk-label{font-size:9.5px;color:var(--txt2);letter-spacing:0.1em;text-transform:uppercase;font-weight:700;margin-top:4px;}
+  .pack-card .pk-price{font-family:var(--mono);font-size:15px;font-weight:700;margin-top:10px;}
+  .pack-card .pk-bonus{font-size:9.5px;color:var(--green);font-weight:700;margin-top:2px;}
+  @media (max-width:480px){.pack-grid{grid-template-columns:1fr;}}
   .nav-links{display:flex;align-items:center;gap:16px;margin-right:4px;}
   .nav-links a{font-size:10.5px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--txt2);text-decoration:none;transition:color .15s;}
   .nav-links a:hover{color:var(--pink);}
@@ -336,6 +348,17 @@
   <div class="modal" id="quiz-modal-body"></div>
 </div>
 
+<!-- TOKEN SHOP — buy a stack of tokens up front, carnival-counter style,
+     then spend them at any festival without ever doing dollar math mid-game. -->
+<div class="modal-overlay" id="shop-modal">
+  <div class="modal" style="max-width:560px;">
+    <h3>🎟️ The Token Shop</h3>
+    <p class="sub">Grab a stack of tokens — spend them at any festival, any time. No card required for the demo.</p>
+    <div class="pack-grid" id="pack-grid"></div>
+    <button class="btn" style="width:100%;margin-top:14px;" onclick="closeModal('shop-modal')">CLOSE</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -394,6 +417,38 @@ function demoBuyTokens(qty){
       toast(`+${qty} tokens added (demo — no real charge)`);
       refreshWallet();
     });
+}
+
+// ─── Token Shop ─────────────────────────────────────────────────────────────
+// Buy tokens in bulk, arcade-counter style — dollars only ever show up HERE,
+// at the moment of buying the stack. Once you're holding tokens, every board
+// and every button talks in tokens only, the same way a Chuck E. Cheese
+// register shows a price but the games themselves just eat tokens.
+const TOKEN_PACKS = [
+  { tokens: 10,  price: 5,  color: 'var(--blue)',   tint: 'rgba(47,123,255,0.10)',  label: 'Starter Stack' },
+  { tokens: 30,  price: 12, color: 'var(--purple)',  tint: 'rgba(162,48,234,0.10)', label: 'Party Pack', badge: 'Most Popular' },
+  { tokens: 75,  price: 25, color: 'var(--gold)',    tint: 'rgba(255,157,0,0.10)',  label: 'Mega Pack', badge: 'Best Value', bonusPct: 15 },
+  { tokens: 150, price: 45, color: 'var(--pink)',    tint: 'rgba(255,61,129,0.10)', label: 'Arcade Vault', bonusPct: 25 },
+];
+
+function openTokenShop(){
+  if (!user) { openAuthModal(); return; }
+  const grid = document.getElementById('pack-grid');
+  grid.innerHTML = TOKEN_PACKS.map(p => `
+    <div class="pack-card" style="--pk-accent:${p.color};--pk-tint:${p.tint};" onclick="buyPack(${p.tokens})">
+      ${p.badge ? `<div class="pk-badge">${p.badge}</div>` : ''}
+      <div class="pk-tokens">🎟️ ${p.tokens}</div>
+      <div class="pk-label">${p.label}</div>
+      <div class="pk-price">$${p.price}</div>
+      ${p.bonusPct ? `<div class="pk-bonus">+${p.bonusPct}% bonus tokens</div>` : ''}
+    </div>
+  `).join('');
+  document.getElementById('shop-modal').classList.add('open');
+}
+
+function buyPack(qty){
+  closeModal('shop-modal');
+  demoBuyTokens(qty);
 }
 
 function openAuthModal(){ document.getElementById('auth-modal').classList.add('open'); }
@@ -680,57 +735,72 @@ function renderList(){
 // file yet) so nothing about cost is a mystery.
 function renderPricing(){
   clearDemoTimers();
-  document.title = 'Pricing — How FestiQ Tokens Work | FestiQ';
+  document.title = 'Pricing — Buy Tokens, Play Any Festival | FestiQ';
   const app = document.getElementById('app');
   app.innerHTML = `
     <a href="/" onclick="return handleFestivalLinkClick(event,'/')" class="backlink">← ALL FESTIVALS</a>
     <div class="hero" style="margin-top:10px;">
       <div class="eyebrow">Pricing</div>
-      <h1>TOKENS, PRICED OFF <span style="color:var(--gold);">THE REAL SHOW</span></h1>
-      <p>Every festival's token price is tied to what a general admission ticket to that exact show actually costs — not a flat number we picked. The harder the ticket, the more a token's worth; the more accessible the show, the cheaper it is to keep swinging.</p>
+      <h1>GRAB A STACK OF <span style="color:var(--gold);">TOKENS</span>, PLAY ANY GAME</h1>
+      <p>Same idea as walking up to the counter at a carnival or an arcade: buy a stack of tokens once, then spend them on any board, at any festival, whenever you want. No card, no checkout, no mental math while you're playing — just tokens in your pocket.</p>
     </div>
 
     <div class="poster-panel">
-      <div class="section-label" style="margin-bottom:14px;">How the math works</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">
-        <div style="text-align:center;">
-          <div style="font-size:26px;margin-bottom:6px;">🎫</div>
-          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">1. We take the GA price</div>
-          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">The average general-admission ticket price for that specific festival.</div>
-        </div>
-        <div style="text-align:center;">
-          <div style="font-size:26px;margin-bottom:6px;">✂️</div>
-          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">2. Discount it ~55%</div>
-          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">Clearing the whole board should cost noticeably less than the ticket itself — you still have to actually know the lineup.</div>
-        </div>
-        <div style="text-align:center;">
-          <div style="font-size:26px;margin-bottom:6px;">🧮</div>
-          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">3. Split across the board</div>
-          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">That discounted total is divided across every square, at that show's tokens-per-try — giving one token's real price.</div>
-        </div>
+      <div class="section-label" style="margin-bottom:4px;">The Token Shop</div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:4px;">Bigger stacks stretch further — the more you grab at once, the more bonus tokens ride along.</div>
+      <div class="pack-grid" id="pricing-pack-grid"></div>
+      <div style="text-align:center;margin-top:16px;">
+        <button class="btn btn-purple" onclick="openTokenShop()">🎟️ BUY TOKENS</button>
       </div>
-      <div style="text-align:center;font-size:10.5px;color:var(--txt3);margin-top:16px;">Festivals without a GA price on file yet fall back to a flat manual price until one is set.</div>
     </div>
 
-    <div class="section-label">Token Price By Festival</div>
+    <div class="poster-panel">
+      <div class="section-label" style="margin-bottom:14px;">How many tokens does it take to play?</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">
+        <div style="text-align:center;">
+          <div style="font-size:26px;margin-bottom:6px;">🎤</div>
+          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">One token, one try</div>
+          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">Pick any artist on the board — one token buys one shot at their trivia.</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:26px;margin-bottom:6px;">🎡</div>
+          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">Bigger show, more tokens</div>
+          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">The same way a bigger prize costs more tickets at the fair, festivals with a bigger real ticket value cost a few more tokens per try.</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:26px;margin-bottom:6px;">🎟️</div>
+          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">The tokens don't change</div>
+          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">What a token itself is worth never changes mid-game — only how many a given festival asks for.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Tokens Per Try, By Festival</div>
     <div class="price-grid" id="pricing-grid"><div class="empty">Loading…</div></div>
 
     <div class="footer-note">FestiQ — a prototype. Real ticket sourcing &amp; payments not wired up yet.</div>
   `;
+  document.getElementById('pricing-pack-grid').innerHTML = TOKEN_PACKS.map(p => `
+    <div class="pack-card" style="--pk-accent:${p.color};--pk-tint:${p.tint};" onclick="openTokenShop()">
+      ${p.badge ? `<div class="pk-badge">${p.badge}</div>` : ''}
+      <div class="pk-tokens">🎟️ ${p.tokens}</div>
+      <div class="pk-label">${p.label}</div>
+      <div class="pk-price">$${p.price}</div>
+      ${p.bonusPct ? `<div class="pk-bonus">+${p.bonusPct}% bonus tokens</div>` : ''}
+    </div>
+  `).join('');
   fetch(`${API}/api/festivals`).then(r => r.json()).then(list => {
     const grid = document.getElementById('pricing-grid');
     if (!list.length) { grid.innerHTML = '<div class="empty">No festivals yet.</div>'; return; }
     const sorted = [...list].sort((a, b) => parseFestivalDate(a.event_date) - parseFestivalDate(b.event_date));
     grid.innerHTML = sorted.map(f => {
       const acc = f.banner_color || 'var(--purple)';
-      const derived = f.token_pricing_source === 'derived';
       return `
       <a class="price-card" href="/festival/${f.slug}" onclick="return handleFestivalLinkClick(event,'/festival/${f.slug}')" style="text-decoration:none;color:inherit;--pc-accent:${acc};--pc-tint:${acc}14;">
         <h4>${f.name}</h4>
         <div class="pc-meta">${f.location || ''}${f.event_date ? ' · ' + f.event_date : ''}</div>
-        <div class="pc-price">$${(f.token_price_usd_cents/100).toFixed(2)} <small>/ token</small></div>
-        <div class="pc-note">🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens===1?'':'s'} per try${f.lineup_count ? ` · ${f.lineup_count} artists` : ''}</div>
-        <div class="pc-note">${derived ? `Derived from a $${(f.avg_ga_price_usd_cents/100).toFixed(0)} average GA ticket` : 'Manually priced — GA data not on file yet'}</div>
+        <div class="pc-price">🎟️ ${f.entry_cost_tokens} <small>token${f.entry_cost_tokens===1?'':'s'} / try</small></div>
+        <div class="pc-note">${f.lineup_count ? `${f.lineup_count} artists on the board` : 'Lineup drops soon'}</div>
       </a>`;
     }).join('');
   });
@@ -743,7 +813,7 @@ function faqToggle(el){
 const FAQ_ITEMS = [
   ["How do I actually win a ticket?", "Pick a festival, pick any artist on the board, and answer their trivia. Get it right and that square clears; get it wrong and it's dead for good — no retries. Clear a full row, column, or diagonal (like bingo) and you win a real ticket to that show."],
   ["What happens if I get a question wrong?", "That artist's square is dead for your board, permanently. It's hard on purpose — this isn't a random draw, it rewards actually knowing the lineup. If no line can ever be completed anymore, your board is busted and it's game over for that festival."],
-  ["What are tokens, and why do they cost money?", `A token buys one attempt at one artist's trivia. Token price is tied to that festival's real general-admission ticket price — see the <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')" style="color:var(--purple);font-weight:700;">Pricing page</a> for the exact math. Every new account also gets a free token to try the mechanic before spending anything.`],
+  ["What are tokens, and how do I get them?", `Same idea as an arcade or a carnival — buy a stack of tokens once at the <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')" style="color:var(--purple);font-weight:700;">Token Shop</a>, then spend them at any festival, any time, with no more checkout in between. One token buys one attempt at one artist's trivia; bigger festivals just ask for a few more tokens per try. Every new account also gets a free token to try the mechanic before buying any.`],
   ["Can I get more than one ticket per festival?", "Yes — most boards support up to 2 ticket tiers. Land your first line and you win one ticket; if a second, non-overlapping line is still reachable on your board, landing that wins a second."],
   ["What if the festival isn't live yet?", "You can still open the room and see the full board and lineup — it's just locked (grayed out, no clicks) until FestiQ flips it live closer to the event. If a festival has no lineup entered at all yet, you'll see a simple \"check back soon\" page instead."],
   ["How do I actually claim a real ticket after winning?", `FestiQ generates a claim code for your win, visible on your <a href="/account" onclick="return handleFestivalLinkClick(event,'/account')" style="color:var(--purple);font-weight:700;">My Account</a> page. Our team follows up to fulfill it — ticket sourcing and fulfillment are still being built out, so treat this as an early prototype rather than a finished storefront.`],
@@ -811,7 +881,7 @@ function renderAccount(){
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
         <button class="btn btn-gold" style="flex:1;min-width:180px;" onclick="claimFreeToken()">🎁 CLAIM FREE TOKEN</button>
-        <button class="btn btn-purple" style="flex:1;min-width:180px;" onclick="demoBuyTokens(5)">+5 TOKENS (DEMO)</button>
+        <button class="btn btn-purple" style="flex:1;min-width:180px;" onclick="openTokenShop()">🎟️ GET TOKENS</button>
       </div>
 
       ${d.tickets.length ? `
@@ -951,11 +1021,11 @@ function renderFestival(slug){
         <div class="wp-stat"><span class="wp-icon">✅</span><div class="wp-val" style="color:var(--green);">${clearedCount}/${cells.length}</div><div class="wp-lbl">Cleared</div></div>
         <div class="wp-stat"><span class="wp-icon">🏆</span><div class="wp-val" style="color:var(--gold);">${linesCompleted}/${maxTiers}</div><div class="wp-lbl">Tickets Won</div></div>
       </div>
-      <div style="text-align:center;font-size:10px;color:var(--txt2);margin:-12px 0 16px;">🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens===1?'':'s'}/try${f.token_price_usd_cents ? ` · ~$${(f.token_price_usd_cents/100).toFixed(2)}/token` : ''} — <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')" style="color:var(--purple);font-weight:700;">how pricing works →</a></div>
+      <div style="text-align:center;font-size:10px;color:var(--txt2);margin:-12px 0 16px;">🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens===1?'':'s'} per try — <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')" style="color:var(--purple);font-weight:700;">get tokens →</a></div>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
         ${user ? `<button class="btn btn-gold" style="flex:1;min-width:180px;" onclick="claimFreeToken()">🎁 CLAIM FREE TOKEN</button>
-                  <button class="btn btn-purple" style="flex:1;min-width:180px;" onclick="demoBuyTokens(5)">+5 TOKENS (DEMO)</button>`
+                  <button class="btn btn-purple" style="flex:1;min-width:180px;" onclick="openTokenShop()">🎟️ GET TOKENS</button>`
                : `<button class="btn btn-purple" style="flex:1;" onclick="openAuthModal()">LOG IN TO PLAY →</button>`}
       </div>` : ''}
 
