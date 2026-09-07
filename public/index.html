@@ -182,8 +182,41 @@
   .backlink{font-size:11px;color:var(--txt2);text-decoration:none;letter-spacing:0.04em;}
   .backlink:hover{color:var(--txt);}
 
+  /* Spotlight — the soonest live/upcoming festival, given real hero treatment */
+  .spotlight{position:relative;overflow:hidden;border-radius:14px;padding:32px 28px;margin-bottom:26px;text-decoration:none;display:block;color:var(--txt);border:1px solid var(--border2);box-shadow:0 12px 34px rgba(20,10,40,0.1);isolation:isolate;}
+  .spotlight::before{content:'';position:absolute;inset:0;z-index:-2;background:var(--spot-bg,linear-gradient(120deg,#ff3d81,#a230ea));}
+  .spotlight::after{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(255,255,255,0.08) 0%,rgba(255,255,255,0.85) 92%);}
+  .spotlight .spot-eyebrow{font-size:10px;font-weight:800;letter-spacing:0.16em;text-transform:uppercase;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,0.25);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .spotlight .spot-name{font-family:var(--display);font-size:34px;font-weight:800;line-height:1.02;margin-bottom:6px;}
+  .spotlight .spot-meta{font-size:12px;color:var(--txt2);font-weight:600;margin-bottom:16px;}
+  .spotlight .spot-cta{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:var(--txt);background:rgba(255,255,255,0.85);border:1px solid var(--border2);padding:9px 18px;border-radius:20px;}
+  .countdown{display:inline-flex;gap:6px;}
+  .countdown .cd-unit{background:rgba(255,255,255,0.9);border-radius:6px;padding:6px 9px;text-align:center;min-width:44px;box-shadow:0 2px 8px rgba(20,10,40,0.1);}
+  .countdown .cd-unit .cd-num{font-family:var(--display);font-size:18px;font-weight:800;line-height:1;}
+  .countdown .cd-unit .cd-lbl{font-size:7.5px;letter-spacing:0.08em;color:var(--txt2);text-transform:uppercase;}
+
+  .trust-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:24px 0 30px;}
+  .trust-strip .trust-item{text-align:center;padding:14px 10px;}
+  .trust-strip .trust-icon{font-size:22px;margin-bottom:6px;}
+  .trust-strip .trust-title{font-family:var(--display);font-size:13px;font-weight:700;margin-bottom:3px;}
+  .trust-strip .trust-sub{font-size:10.5px;color:var(--txt2);line-height:1.4;}
+
+  .section-label{font-size:11px;color:var(--txt2);letter-spacing:0.14em;font-weight:700;text-transform:uppercase;margin:30px 0 12px;display:flex;align-items:center;gap:8px;}
+  .section-label::after{content:'';flex:1;height:1px;background:var(--border);}
+
+  .lineup-poster{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px;}
+  .lineup-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;background:var(--bg1);border:1px solid var(--border2);padding:6px 12px;border-radius:20px;}
+  .lineup-chip .lc-genre{color:var(--txt2);font-weight:500;}
+  .lineup-chip.is-cleared{border-color:var(--green);color:var(--green);}
+  .lineup-chip.is-dead{border-color:var(--red);color:var(--red);opacity:0.7;text-decoration:line-through;}
+
+  /* Confetti burst on a ticket win */
+  .confetti-piece{position:fixed;top:-12px;z-index:400;pointer-events:none;border-radius:1px;animation:confettiFall linear forwards;}
+  @keyframes confettiFall{to{transform:translateY(108vh) rotate(720deg);opacity:0.9;}}
+
   @media (max-width:600px){
     .hero h1{font-size:32px;}
+    .spotlight .spot-name{font-size:26px;}
   }
 </style>
 </head>
@@ -335,7 +368,73 @@ window.addEventListener('hashchange', render);
 function render(){
   const hash = window.location.hash || '#/';
   if (hash.startsWith('#/f/')) renderFestival(hash.slice(4));
+  else if (!window.location.hash && window.__FESTIQ_INITIAL_SLUG) {
+    const slug = window.__FESTIQ_INITIAL_SLUG;
+    window.__FESTIQ_INITIAL_SLUG = null; // one-shot — only on the very first (server-rendered) load
+    renderFestival(slug);
+  }
   else renderList();
+}
+
+// Real <a href> on every festival card/link so right-click → copy link,
+// middle-click, and crawlers all get the real server-rendered /festival/:slug
+// page (see server.js). A plain left-click still short-circuits into the
+// fast, no-reload hash route for anyone already in the app.
+function handleFestivalLinkClick(e, slug){
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return true;
+  e.preventDefault();
+  navigate('#/f/' + slug);
+  return false;
+}
+
+function daysHoursUntil(raw){
+  const ts = parseFestivalDate(raw);
+  if (!isFinite(ts)) return null;
+  const diff = ts - Date.now();
+  if (diff <= 0) return null;
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  return { days, hours };
+}
+
+function countdownHTML(raw){
+  const d = daysHoursUntil(raw);
+  if (!d) return '';
+  return `<div class="countdown">
+    <div class="cd-unit"><div class="cd-num">${d.days}</div><div class="cd-lbl">Days</div></div>
+    <div class="cd-unit"><div class="cd-num">${d.hours}</div><div class="cd-lbl">Hrs</div></div>
+  </div>`;
+}
+
+function trustStripHTML(){
+  return `
+    <div class="trust-strip">
+      <div class="trust-item"><div class="trust-icon">🎤</div><div class="trust-title">Real Lineups</div><div class="trust-sub">Every artist and set is pulled from the actual festival bill.</div></div>
+      <div class="trust-item"><div class="trust-icon">🧠</div><div class="trust-title">Skill, Not Luck</div><div class="trust-sub">Know the acts? Clear the board. No random draws.</div></div>
+      <div class="trust-item"><div class="trust-icon">🎟️</div><div class="trust-title">Real Tickets</div><div class="trust-sub">Land a line and claim an actual ticket to the show.</div></div>
+    </div>
+  `;
+}
+
+// The soonest festival worth featuring big — prefers a live one, falls back
+// to the nearest upcoming date. Gives the lobby an actual focal point
+// instead of a flat grid of identical cards.
+function spotlightHTML(list){
+  const candidates = [...list].sort((a, b) => parseFestivalDate(a.event_date) - parseFestivalDate(b.event_date));
+  const f = candidates.find(x => x.status === 'live') || candidates.find(x => isFinite(parseFestivalDate(x.event_date)));
+  if (!f) return '';
+  const cd = countdownHTML(f.event_date);
+  return `
+    <a href="/festival/${f.slug}" onclick="return handleFestivalLinkClick(event,'${f.slug}')" class="spotlight" style="--spot-bg:linear-gradient(120deg, ${f.banner_color || '#ff3d81'}, #a230ea);">
+      <div class="spot-eyebrow">⚡ ${f.status === 'live' ? "PLAYING NOW" : "UP NEXT"}</div>
+      <div class="spot-name">${f.name}</div>
+      <div class="spot-meta">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''} ${f.status === 'live' ? `· 🎁 ${f.ticket_prize_label || 'Ticket prize'}` : '· Lineup drops soon'}</div>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        ${cd}
+        <span class="spot-cta">${f.status === 'live' ? 'PLAY THE BOARD →' : 'GET NOTIFIED →'}</span>
+      </div>
+    </a>
+  `;
 }
 
 // ─── Animated "how it works" demo board (mirrors PropQuix's guest demo) ─────
@@ -434,6 +533,7 @@ function parseFestivalDate(raw){
 
 function renderList(){
   clearDemoTimers();
+  document.title = 'FestiQ — Trivia Your Way Into The Lineup';
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="hero">
@@ -441,14 +541,19 @@ function renderList(){
       <h1>WIN A <span style="color:var(--gold);">TICKET</span> TO THE SHOW</h1>
       <p>Pick a festival, pick an artist on the lineup, answer their trivia. Land a full row, column, or diagonal and you win a ticket — no luck of the draw, just knowing the lineup.</p>
     </div>
+    ${trustStripHTML()}
+    <div id="spotlight-slot"></div>
     ${renderDemo()}
+    <div class="section-label">All Festivals</div>
     <div class="festival-grid" id="festival-grid"><div class="empty">Loading festivals…</div></div>
     <div class="footer-note">FestiQ — a prototype. Real ticket sourcing &amp; payments not wired up yet.</div>
   `;
   runDemo();
   fetch(`${API}/api/festivals`).then(r => r.json()).then(list => {
     const grid = document.getElementById('festival-grid');
-    if (!list.length) { grid.innerHTML = '<div class="empty">No festivals live yet.</div>'; return; }
+    const spotSlot = document.getElementById('spotlight-slot');
+    if (!list.length) { grid.innerHTML = '<div class="empty">No festivals live yet.</div>'; if (spotSlot) spotSlot.innerHTML = ''; return; }
+    if (spotSlot) spotSlot.innerHTML = spotlightHTML(list);
     const sorted = [...list].sort((a, b) => parseFestivalDate(a.event_date) - parseFestivalDate(b.event_date));
     grid.innerHTML = sorted.map(f => {
       const isLive = f.status === 'live';
@@ -456,20 +561,23 @@ function renderList(){
       const tag = !isLive ? { cls: 'tag-upcoming', label: 'Upcoming' }
                 : soldOut ? { cls: 'tag-won', label: 'Tickets Claimed' }
                 : { cls: 'tag-live', label: 'Live' };
+      const cd = daysHoursUntil(f.event_date);
       return `
-      <div class="festival-card ${!isLive ? 'is-upcoming' : ''}" ${isLive ? `onclick="navigate('#/f/${f.slug}')"` : ''}>
+      <a class="festival-card ${!isLive ? 'is-upcoming' : ''}" href="/festival/${f.slug}"
+         ${isLive ? `onclick="return handleFestivalLinkClick(event,'${f.slug}')"` : `onclick="return false;"`}
+         style="text-decoration:none;color:inherit;">
         <div class="festival-banner" style="background:linear-gradient(135deg, ${f.banner_color}, #ffffff);">
           <span class="tag ${tag.cls}">${tag.label}</span>
         </div>
         <div class="festival-body">
           <h3>${f.name}</h3>
-          <div class="meta">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
+          <div class="meta">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}${cd ? ` · in ${cd.days}d` : ''}</div>
           ${isLive
             ? `<div class="meta">${f.lineup_count} artists on the board · 🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'}/try</div>
                <div class="meta" style="color:var(--gold);font-weight:700;">🎁 ${f.ticket_prize_label} · up to ${f.tickets_available} ticket${f.tickets_available === 1 ? '' : 's'}</div>`
             : `<div class="meta">Lineup drops soon</div>`}
         </div>
-      </div>
+      </a>
     `;
     }).join('');
   });
@@ -544,16 +652,24 @@ function renderFestival(slug){
     const linesCompleted = f.board ? f.board.lines_completed : 0;
     const maxTiers = f.board ? f.board.max_tiers : 2;
     const clearedCount = cells.filter(c => c.status === 'cleared').length;
+    document.title = `${f.name} Trivia — Win ${f.ticket_prize_label || 'a Ticket'} | FestiQ`;
+    const eventCd = daysHoursUntil(f.event_date);
 
     app.innerHTML = `
-      <a href="#/" class="backlink">← ALL FESTIVALS</a>
+      <a href="/" onclick="return handleFestivalLinkClick(event,'')" class="backlink">← ALL FESTIVALS</a>
       <div style="text-align:center;margin:18px 0 20px;">
         <div class="eyebrow" style="font-size:10px;color:var(--gold);letter-spacing:0.14em;font-weight:700;margin-bottom:8px;text-transform:uppercase;">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
         <div style="font-family:var(--display);font-size:36px;font-weight:800;line-height:1;margin-bottom:8px;">${f.name}</div>
-        <div style="font-size:12.5px;color:var(--txt2);max-width:520px;margin:0 auto;">Clear any row, column, or diagonal of artist trivia to win ${f.ticket_prize_label}. One shot per artist — hard on purpose.</div>
+        <div style="font-size:12.5px;color:var(--txt2);max-width:520px;margin:0 auto 12px;">Clear any row, column, or diagonal of artist trivia to win ${f.ticket_prize_label}. One shot per artist — hard on purpose.</div>
+        ${eventCd ? `<div style="display:flex;justify-content:center;">${countdownHTML(f.event_date)}</div>` : ''}
       </div>
 
       ${tierExplainerHTML(f)}
+
+      <div class="section-label">Full Lineup</div>
+      <div class="lineup-poster">
+        ${[...cells].sort((a,b) => a.position - b.position).map(c => `<span class="lineup-chip ${c.status === 'cleared' ? 'is-cleared' : c.status === 'dead' ? 'is-dead' : ''}">${c.status === 'cleared' ? '✅ ' : c.status === 'dead' ? '💀 ' : '🎤 '}${c.name}${c.genre ? ` <span class="lc-genre">· ${c.genre}</span>` : ''}</span>`).join('')}
+      </div>
 
       ${linesCompleted >= 1 ? `<div class="banner-block banner-gold">🎉 You've won ${linesCompleted} ticket${linesCompleted === 1 ? '' : 's'} on this board! ${linesCompleted < maxTiers ? 'Keep going for another line.' : 'Max tickets reached — board complete.'}</div>` : ''}
 
@@ -779,6 +895,7 @@ function submitQuiz(){
     closeModal('quiz-modal');
     if (d.ticket_won) {
       const tierMsg = d.board.lines_completed >= d.board.max_tiers ? ' — max tickets reached, board complete!' : ' — keep going, a 2nd line is still in play!';
+      fireConfetti();
       toast(`🎉 LINE COMPLETE! You won: ${d.ticket_won.prize} — claim code ${d.ticket_won.claim_code}${tierMsg}`);
     } else if (d.passed && d.board.lines_completed >= 1 && !d.next_line_reachable) {
       toast(`✅ ${d.artist.name} cleared — but a 2nd line is no longer reachable. Your ticket is locked in either way.`);
@@ -791,6 +908,25 @@ function submitQuiz(){
     }
     renderFestival(currentFestival.slug);
   });
+}
+
+// Small celebratory confetti burst — plain DOM/CSS, no canvas or library.
+function fireConfetti(){
+  const colors = ['#ff3d81','#ff9d00','#ffe066','#00e5a0','#2f9bff','#a230ea'];
+  const count = 60;
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    const size = 6 + Math.random() * 6;
+    el.className = 'confetti-piece';
+    el.style.left = (Math.random() * 100) + 'vw';
+    el.style.width = size + 'px';
+    el.style.height = (size * 0.4) + 'px';
+    el.style.background = colors[Math.floor(Math.random() * colors.length)];
+    el.style.animationDuration = (2.2 + Math.random() * 1.6) + 's';
+    el.style.transform = `rotate(${Math.random() * 360}deg)`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 4200);
+  }
 }
 
 updateAuthUI();

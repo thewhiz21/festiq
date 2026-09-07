@@ -61,7 +61,6 @@ function parseCookies(header) {
 }
 
 app.use((req, res, next) => {
-  res.setHeader("X-Robots-Tag", "noindex, nofollow"); // never index while under wraps (or after, until you ask to)
   if (
     !siteSettings.site_locked ||
     req.path.startsWith("/api/") ||
@@ -83,10 +82,110 @@ app.use((req, res, next) => {
   }
   if (PREVIEW_KEY && cookies[PREVIEW_COOKIE] === PREVIEW_KEY) return next();
 
+  // Only the actual coming-soon placeholder gets noindex — once the gate is
+  // open (or a preview visitor unlocks it), the real site should be fully
+  // crawlable. Setting this unconditionally on every response (as before)
+  // was silently blocking Google from ever indexing the live site.
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
   res.status(200).sendFile(path.join(__dirname, "..", "public", "coming-soon.html"));
 });
 
 app.get("/admin", (req, res) => res.sendFile(path.join(__dirname, "..", "public", "admin.html")));
+
+// ─── SEO: robots.txt + sitemap.xml ───────────────────────────────────────────
+app.get("/robots.txt", (req, res) => {
+  res.type("text/plain");
+  if (siteSettings.site_locked) {
+    res.send("User-agent: *\nDisallow: /\n");
+  } else {
+    res.send(`User-agent: *\nAllow: /\n\nSitemap: ${req.protocol}://${req.get("host")}/sitemap.xml\n`);
+  }
+});
+
+app.get("/sitemap.xml", async (req, res) => {
+  try {
+    const base = `${req.protocol}://${req.get("host")}`;
+    res.type("application/xml");
+    if (siteSettings.site_locked) return res.send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`);
+    const { rows: festivals } = await pool.query(`SELECT slug, status FROM festivals ORDER BY event_date ASC`);
+    const urls = [`<url><loc>${base}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>`];
+    for (const f of festivals) {
+      urls.push(`<url><loc>${base}/festival/${f.slug}</loc><changefreq>daily</changefreq><priority>${f.status === "live" ? "0.9" : "0.5"}</priority></url>`);
+    }
+    res.send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join("")}</urlset>`);
+  } catch (err) {
+    res.status(500).send("");
+  }
+});
+
+// ─── SEO: real, crawlable per-festival URLs ──────────────────────────────────
+// The app itself is a hash-routed SPA (#/f/slug), which is invisible to
+// search engines and to link-preview scrapers (iMessage, Slack, Twitter,
+// Facebook — none of which execute JS). This route gives each festival a
+// real path with server-rendered <title>/OG/Twitter meta and JSON-LD Event
+// structured data baked in, then hands off to the normal SPA by setting the
+// URL hash — so a human visiting the link gets the exact same app, while a
+// crawler or scraper sees real, specific content before any JS runs.
+function escapeHtml(str) {
+  return String(str || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+app.get("/festival/:slug", async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`SELECT * FROM festivals WHERE slug = $1`, [req.params.slug]);
+    const f = rows[0];
+    if (!f) return next(); // no such festival — fall through to the SPA's own "not found" UI
+    const { rows: artists } = await pool.query(`SELECT name, genre FROM artists WHERE festival_id = $1 ORDER BY position ASC`, [f.id]);
+
+    const base = `${req.protocol}://${req.get("host")}`;
+    const title = f.status === "live"
+      ? `${f.name} Trivia — Win ${f.ticket_prize_label || "a Ticket"} | FestiQ`
+      : `${f.name} — Coming to FestiQ`;
+    const lineupNames = artists.map((a) => a.name).join(", ");
+    const description = f.status === "live"
+      ? `Play free festival trivia for ${f.name}${f.location ? " in " + f.location : ""}. Clear a row of artist quizzes — ${lineupNames ? "featuring " + lineupNames.slice(0, 180) + (lineupNames.length > 180 ? "…" : "") : "full lineup on the board"} — and win ${f.ticket_prize_label || "a ticket"}.`
+      : `${f.name}${f.location ? " · " + f.location : ""}${f.event_date ? " · " + f.event_date : ""}. Lineup and trivia board drop soon on FestiQ.`;
+    const ogImage = `${base}/assets/logo-512.png`;
+    const canonical = `${base}/festival/${f.slug}`;
+
+    const jsonLd = {
+      "@context": "https://schema.org",
+      "@type": "Event",
+      name: f.name,
+      description,
+      startDate: f.event_date || undefined,
+      location: f.location ? { "@type": "Place", name: f.location } : undefined,
+      url: canonical,
+      ...(artists.length ? { performer: artists.map((a) => ({ "@type": "MusicGroup", name: a.name })) } : {}),
+    };
+
+    // Same SPA shell as "/", just with this festival's real meta tags baked
+    // into <head> and a noscript fallback with real text — so a browser
+    // gets the identical app at a real, stable URL (no redirect / no URL
+    // flicker), while a non-JS scraper (iMessage, Slack, Twitter previews)
+    // still sees accurate title/description/image and structured data.
+    const fs = require("fs");
+    let html = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8");
+    html = html
+      .replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)}</title>`)
+      .replace(/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${escapeHtml(title)}">`)
+      .replace(/<meta property="og:description"[^>]*>/, `<meta property="og:description" content="${escapeHtml(description)}">`)
+      .replace(/<meta property="og:image"[^>]*>/, `<meta property="og:image" content="${ogImage}">`)
+      .replace(/<meta name="twitter:title"[^>]*>/, `<meta name="twitter:title" content="${escapeHtml(title)}">`)
+      .replace(/<meta name="twitter:description"[^>]*>/, `<meta name="twitter:description" content="${escapeHtml(description)}">`)
+      .replace(/<meta name="twitter:image"[^>]*>/, `<meta name="twitter:image" content="${ogImage}">`)
+      .replace("</head>", `<meta name="description" content="${escapeHtml(description)}">
+<link rel="canonical" href="${canonical}">
+<meta property="og:url" content="${canonical}">
+<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>
+<noscript><h1>${escapeHtml(f.name)}</h1><p>${escapeHtml(description)}</p>${artists.length ? `<h2>Lineup</h2><ul>${artists.map((a) => `<li>${escapeHtml(a.name)}${a.genre ? " — " + escapeHtml(a.genre) : ""}</li>`).join("")}</ul>` : ""}</noscript>
+<script>window.__FESTIQ_INITIAL_SLUG = ${JSON.stringify(f.slug)};</script>
+</head>`);
+    res.send(html);
+  } catch (err) {
+    next();
+  }
+});
 
 app.use(express.static(path.join(__dirname, "..", "public")));
 
