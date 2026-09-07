@@ -108,8 +108,7 @@
 
   .festival-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-top:24px;}
   .festival-card{background:var(--bg1);border:1.5px solid var(--fc-accent,var(--border));border-radius:10px;overflow:hidden;cursor:pointer;transition:transform .22s cubic-bezier(0.16,1,0.3,1),border-color .15s,box-shadow .22s;box-shadow:0 4px 14px rgba(20,10,40,0.08);position:relative;}
-  .festival-card.is-upcoming{cursor:default;opacity:0.78;}
-  .festival-card.is-upcoming:hover{transform:none;box-shadow:0 4px 14px rgba(20,10,40,0.08);}
+  .festival-card.is-upcoming{opacity:0.82;}
   .festival-card:hover{transform:translateY(-5px) rotate(-0.4deg);box-shadow:0 16px 32px rgba(20,10,40,0.16),0 0 0 2px var(--fc-accent,var(--border2));}
   .festival-banner{height:84px;display:flex;align-items:flex-end;padding:12px 14px;position:relative;}
   .festival-banner::after{content:'';position:absolute;left:14px;right:14px;bottom:0;height:1px;background-image:radial-gradient(circle,rgba(255,255,255,0.9) 1.5px,transparent 1.6px);background-size:8px 100%;opacity:0.8;}
@@ -140,6 +139,9 @@
   .artist-box.dead::before{background:var(--red);opacity:1;}
   .artist-box.inline{box-shadow:0 0 0 2px var(--gold),0 0 18px rgba(255,213,79,0.35)!important;border-color:var(--gold)!important;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both;}
   .artist-box.dimmed{opacity:0.3;filter:grayscale(0.7);animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both;}
+  .artist-box.locked{cursor:default!important;filter:grayscale(0.85);opacity:0.62;background:var(--bg2)!important;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both!important;}
+  .artist-box.locked:hover{transform:none;box-shadow:none;}
+  .artist-box.locked .tagline{color:var(--txt2);background:rgba(20,10,40,0.06);}
   .artist-box .logo-badge{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:14px;color:#fff;margin-bottom:5px;background:var(--box-accent,var(--purple));box-shadow:0 3px 8px rgba(20,10,40,0.22),0 0 0 3px #fff;flex-shrink:0;}
   .artist-box.dead .logo-badge{filter:grayscale(1);opacity:0.6;}
   .artist-box .status-stamp{position:absolute;top:4px;right:4px;font-size:15px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.2));}
@@ -601,7 +603,7 @@ function renderList(){
       const cd = daysHoursUntil(f.event_date);
       return `
       <a class="festival-card ${!isLive ? 'is-upcoming' : ''}" href="/festival/${f.slug}"
-         ${isLive ? `onclick="return handleFestivalLinkClick(event,'/festival/${f.slug}')"` : `onclick="return false;"`}
+         onclick="return handleFestivalLinkClick(event,'/festival/${f.slug}')"
          style="text-decoration:none;color:inherit;--fc-accent:${f.banner_color};">
         <div class="festival-banner" style="background:linear-gradient(135deg, ${f.banner_color}, ${f.banner_color}dd 40%, #ffffff 130%);">
           <span class="tag ${tag.cls}" style="background:rgba(255,255,255,0.85);">${tag.label}</span>
@@ -673,10 +675,20 @@ function renderFestival(slug){
     if (f.error) { app.innerHTML = `<div class="empty">${f.error}</div>`; return; }
     currentFestival = f;
 
-    if (f.status !== 'live') {
+    const isLive = f.status === 'live';
+    document.title = `${f.name} Trivia Bingo — ${isLive ? 'Win ' + f.name + ' Tickets' : 'Coming Soon'} | FestiQ`;
+    const eventCd = daysHoursUntil(f.event_date);
+
+    // A festival with no lineup entered yet has nothing to show as a board —
+    // that's the only case that still gets the bare "check back soon" page.
+    // Once artists exist, the room opens even before the festival goes
+    // live: same board, same lineup, just locked (grayed out, no clicks,
+    // no wallet) until FestiQ flips it live.
+    if (!f.artists || !f.artists.length) {
       app.innerHTML = `
-        <a href="#/" class="backlink">← ALL FESTIVALS</a>
+        <a href="/" onclick="return handleFestivalLinkClick(event,'/')" class="backlink">← ALL FESTIVALS</a>
         <div style="text-align:center;margin:60px 0;">
+          <div style="font-size:10px;color:var(--purple);letter-spacing:0.16em;font-weight:800;margin-bottom:6px;text-transform:uppercase;">Festival Trivia Bingo</div>
           <div class="eyebrow" style="font-size:10px;color:var(--txt2);letter-spacing:0.14em;font-weight:700;margin-bottom:8px;text-transform:uppercase;">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
           <div style="font-family:var(--display);font-size:32px;font-weight:800;line-height:1;margin-bottom:12px;">${f.name}</div>
           <div style="font-size:12.5px;color:var(--txt2);">Lineup and trivia board drop closer to the date. Check back soon.</div>
@@ -689,8 +701,6 @@ function renderFestival(slug){
     const linesCompleted = f.board ? f.board.lines_completed : 0;
     const maxTiers = f.board ? f.board.max_tiers : 2;
     const clearedCount = cells.filter(c => c.status === 'cleared').length;
-    document.title = `${f.name} Trivia Bingo — Win ${f.name} Tickets | FestiQ`;
-    const eventCd = daysHoursUntil(f.event_date);
 
     app.innerHTML = `
       <a href="/" onclick="return handleFestivalLinkClick(event,'/')" class="backlink">← ALL FESTIVALS</a>
@@ -698,9 +708,11 @@ function renderFestival(slug){
         <div style="font-size:10px;color:var(--purple);letter-spacing:0.16em;font-weight:800;margin-bottom:6px;text-transform:uppercase;">Festival Trivia Bingo</div>
         <div class="eyebrow" style="font-size:10px;color:var(--gold);letter-spacing:0.14em;font-weight:700;margin-bottom:8px;text-transform:uppercase;">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
         <div style="font-family:var(--display);font-size:36px;font-weight:800;line-height:1;margin-bottom:8px;">${f.name}</div>
-        <div style="font-size:12.5px;color:var(--txt2);max-width:520px;margin:0 auto 12px;">Clear any row, column, or diagonal of artist trivia to win ${f.ticket_prize_label}. One shot per artist — hard on purpose.</div>
+        <div style="font-size:12.5px;color:var(--txt2);max-width:520px;margin:0 auto 12px;">${isLive ? `Clear any row, column, or diagonal of artist trivia to win ${f.ticket_prize_label}. One shot per artist — hard on purpose.` : `The lineup's locked in — here's the board. It unlocks for play once FestiQ goes live for this festival.`}</div>
         ${eventCd ? `<div style="display:flex;justify-content:center;">${countdownHTML(f.event_date)}</div>` : ''}
       </div>
+
+      ${!isLive ? `<div class="banner-block" style="background:rgba(20,10,40,0.05);border:2px dashed var(--border2);color:var(--txt2);">🔒 UPCOMING — this board is locked for preview. Come back closer to ${f.event_date || 'the event'} to play it for real.</div>` : ''}
 
       ${tierExplainerHTML(f)}
 
@@ -709,8 +721,9 @@ function renderFestival(slug){
         ${[...cells].sort((a,b) => a.position - b.position).map(c => `<span class="lineup-chip ${c.status === 'cleared' ? 'is-cleared' : c.status === 'dead' ? 'is-dead' : ''}">${c.status === 'cleared' ? '✅ ' : c.status === 'dead' ? '💀 ' : '🎤 '}${c.name}${c.genre ? ` <span class="lc-genre">· ${c.genre}</span>` : ''}</span>`).join('')}
       </div>
 
-      ${linesCompleted >= 1 ? `<div class="banner-block banner-gold">🎉 You've won ${linesCompleted} ticket${linesCompleted === 1 ? '' : 's'} on this board! ${linesCompleted < maxTiers ? 'Keep going for another line.' : 'Max tickets reached — board complete.'}</div>` : ''}
+      ${isLive && linesCompleted >= 1 ? `<div class="banner-block banner-gold">🎉 You've won ${linesCompleted} ticket${linesCompleted === 1 ? '' : 's'} on this board! ${linesCompleted < maxTiers ? 'Keep going for another line.' : 'Max tickets reached — board complete.'}</div>` : ''}
 
+      ${isLive ? `
       <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
         <div class="stat-tile"><div class="icon">🎟️</div><div class="val" style="color:var(--gold);" id="wallet-stat">${user ? '—' : '—'}</div><div class="lbl">Tokens</div></div>
         <div class="stat-tile"><div class="icon">✅</div><div class="val" style="color:var(--green);">${clearedCount}/${cells.length}</div><div class="lbl">Cleared</div></div>
@@ -721,30 +734,32 @@ function renderFestival(slug){
         ${user ? `<button class="btn btn-gold" style="flex:1;min-width:180px;" onclick="claimFreeToken()">🎁 CLAIM FREE TOKEN</button>
                   <button class="btn btn-purple" style="flex:1;min-width:180px;" onclick="demoBuyTokens(5)">+5 TOKENS (DEMO)</button>`
                : `<button class="btn btn-purple" style="flex:1;" onclick="openAuthModal()">LOG IN TO PLAY →</button>`}
-      </div>
+      </div>` : ''}
 
       <div style="font-size:11px;color:var(--txt2);letter-spacing:0.1em;font-weight:600;margin-bottom:10px;text-transform:uppercase;">
-        The board — 🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist, one shot each
+        The board — 🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist, one shot each${!isLive ? ' · locked until live' : ''}
       </div>
-      <div class="board-legend">
+      ${isLive ? `<div class="board-legend">
         <span><span class="lg-dot" style="background:var(--purple);"></span>${cells.filter(c => c.status === 'available').length} available — tap to play</span>
         <span><span class="lg-dot" style="background:var(--green);"></span>${clearedCount} cleared</span>
         <span><span class="lg-dot" style="background:var(--red);"></span>${cells.filter(c => c.status === 'dead').length} dead — no retry</span>
-      </div>
-      <div class="board-grid" id="board-grid" style="grid-template-columns:repeat(${f.grid_size},1fr);"></div>
-      <div class="footer-note">Entry costs ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist attempt. Fail and that artist is dead for this board — no retries.</div>
+      </div>` : ''}
+      <div class="board-grid ${!isLive ? 'is-locked' : ''}" id="board-grid" style="grid-template-columns:repeat(${f.grid_size},1fr);"></div>
+      <div class="footer-note">${isLive ? `Entry costs ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist attempt. Fail and that artist is dead for this board — no retries.` : `This board opens for real attempts once FestiQ marks ${f.name} live.`}</div>
     `;
 
-    refreshWallet();
-    // wallet pill already updates the header; mirror it into the stat tile too
-    if (token) {
-      fetch(`${API}/api/wallet`, { headers: authHeaders() }).then(r => r.json()).then(d => {
-        const el = document.getElementById('wallet-stat');
-        if (el && d.tokens !== undefined) el.textContent = d.tokens;
-      });
+    if (isLive) {
+      refreshWallet();
+      // wallet pill already updates the header; mirror it into the stat tile too
+      if (token) {
+        fetch(`${API}/api/wallet`, { headers: authHeaders() }).then(r => r.json()).then(d => {
+          const el = document.getElementById('wallet-stat');
+          if (el && d.tokens !== undefined) el.textContent = d.tokens;
+        });
+      }
     }
 
-    renderBoardGrid(cells, f.grid_size);
+    renderBoardGrid(cells, f.grid_size, !isLive);
   });
 }
 
@@ -767,21 +782,25 @@ function artistAccent(name){
   return { accent: `hsl(${hue},70%,52%)`, glow: `hsla(${hue},85%,60%,0.35)`, tint: `hsl(${hue},85%,95%)` };
 }
 
-function renderBoardGrid(cells, gridSize){
+// locked=true renders the same board (used for a not-yet-live festival that
+// already has its lineup entered) with no click/hover interaction and a
+// grayed, muted look instead of the lively "available" treatment — a
+// preview of the room, not a playable one yet.
+function renderBoardGrid(cells, gridSize, locked){
   const grid = document.getElementById('board-grid');
   const sorted = [...cells].sort((a,b) => a.position - b.position);
   grid.innerHTML = sorted.map((c, i) => {
     const { accent, glow, tint } = artistAccent(c.name);
     const stamp = c.status === 'cleared' ? '✅' : c.status === 'dead' ? '💀' : '';
+    const handlers = locked ? '' : `onmouseenter="hoverLine(${c.position}, ${gridSize})" onmouseleave="clearHoverLine()" onclick="handleBoxClick(${c.artist_id}, '${c.status}')"`;
     return `
-    <div class="artist-box ${c.status}" data-pos="${c.position}" style="--box-accent:${accent};--box-glow:${glow};--box-tint:${tint};animation-delay:${Math.min(i * 35, 400)}ms;"
-         onmouseenter="hoverLine(${c.position}, ${gridSize})" onmouseleave="clearHoverLine()"
-         onclick="handleBoxClick(${c.artist_id}, '${c.status}')">
+    <div class="artist-box ${c.status} ${locked ? 'locked' : ''}" data-pos="${c.position}" style="--box-accent:${locked ? 'var(--txt3)' : accent};--box-glow:${glow};--box-tint:${tint};animation-delay:${Math.min(i * 35, 400)}ms;"
+         ${handlers}>
       ${stamp ? `<div class="status-stamp">${stamp}</div>` : ''}
-      <div class="logo-badge" style="background:${c.status === 'dead' ? 'var(--txt3)' : accent};">${artistInitials(c.name)}</div>
+      <div class="logo-badge" style="background:${locked || c.status === 'dead' ? 'var(--txt3)' : accent};">${artistInitials(c.name)}</div>
       <div class="name">${c.name}</div>
       <div class="genre">${c.genre || ''}</div>
-      <div class="tagline">${c.status === 'cleared' ? 'CLEARED' : c.status === 'dead' ? 'DEAD — NO RETRY' : 'PLAY →'}</div>
+      <div class="tagline">${locked ? '🔒 LOCKED' : c.status === 'cleared' ? 'CLEARED' : c.status === 'dead' ? 'DEAD — NO RETRY' : 'PLAY →'}</div>
     </div>
   `;
   }).join('');
