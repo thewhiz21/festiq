@@ -21,19 +21,19 @@
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 
   :root{
-    --bg:      #080a10;
-    --bg1:     #10101c;
-    --bg2:     #181828;
-    --border:  rgba(255,255,255,0.07);
-    --border2: rgba(255,255,255,0.14);
-    --green:   #00ffb3;
-    --red:     #ff3355;
-    --gold:    #ffd54f;
-    --blue:    #4da6ff;
-    --purple:  #c084fc;
-    --txt:     #f0eefc;
-    --txt2:    #8a80a8;
-    --txt3:    #423a55;
+    --bg:      #fffaf6;
+    --bg1:     #ffffff;
+    --bg2:     #fbf2ff;
+    --border:  rgba(20,10,40,0.08);
+    --border2: rgba(20,10,40,0.16);
+    --green:   #00c896;
+    --red:     #ff2d55;
+    --gold:    #ff9d00;
+    --blue:    #2f7bff;
+    --purple:  #a230ea;
+    --txt:     #170b28;
+    --txt2:    #6a5f85;
+    --txt3:    #b3a8c9;
     --mono:    'IBM Plex Mono', monospace;
     --display: 'Barlow Condensed', sans-serif;
   }
@@ -41,11 +41,13 @@
   html{height:100%;}
   body{
     height:100%;
-    background:#080a10;
+    background:#fffaf6;
     background-image:
-      radial-gradient(ellipse 70% 50% at 10% 5%, rgba(192,132,252,0.14) 0%, transparent 55%),
-      radial-gradient(ellipse 50% 40% at 90% 90%, rgba(255,213,79,0.08) 0%, transparent 50%),
-      radial-gradient(ellipse 100% 60% at 50% 40%, rgba(192,132,252,0.05) 0%, transparent 65%);
+      radial-gradient(ellipse 70% 50% at 10% 0%, rgba(255,61,129,0.20) 0%, transparent 55%),
+      radial-gradient(ellipse 60% 45% at 90% 8%, rgba(47,123,255,0.18) 0%, transparent 55%),
+      radial-gradient(ellipse 55% 45% at 100% 60%, rgba(255,157,0,0.16) 0%, transparent 55%),
+      radial-gradient(ellipse 80% 60% at 30% 100%, rgba(162,48,234,0.16) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 0% 90%, rgba(0,200,150,0.14) 0%, transparent 55%);
     background-attachment:fixed;
     color:var(--txt);
     font-family:var(--mono);
@@ -65,7 +67,7 @@
   .fade-up{animation:fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) forwards;}
 
   .btn{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;border:1px solid var(--border2);background:transparent;color:var(--txt2);padding:9px 18px;cursor:pointer;transition:all .18s;border-radius:3px;}
-  .btn:hover{border-color:var(--txt);color:var(--txt);background:rgba(255,255,255,0.04);transform:translateY(-1px);}
+  .btn:hover{border-color:var(--txt);color:var(--txt);background:rgba(20,10,40,0.04);transform:translateY(-1px);}
   .btn-green{border-color:var(--green);color:var(--green);}
   .btn-green:hover{background:var(--green);color:#000;box-shadow:0 0 20px rgba(0,255,179,0.35);}
   .btn-gold{border-color:var(--gold);color:var(--gold);}
@@ -81,15 +83,15 @@
   .tag{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:3px 9px;border:1px solid;border-radius:20px;}
   .tag-live{color:var(--green);border-color:var(--green);background:rgba(0,255,179,0.08);}
   .tag-won{color:var(--gold);border-color:var(--gold);background:rgba(255,213,79,0.08);}
-  .tag-upcoming{color:var(--txt2);border-color:var(--border2);background:rgba(255,255,255,0.04);}
+  .tag-upcoming{color:var(--txt2);border-color:var(--border2);background:rgba(20,10,40,0.04);}
 
-  .header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(8,10,16,0.88);backdrop-filter:blur(8px);z-index:50;}
+  .header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(255,250,246,0.88);backdrop-filter:blur(8px);z-index:50;}
   .logo,.logo span{
-    background:linear-gradient(100deg,#3ee7ff 0%,#4da6ff 22%,#8a7bff 45%,#c084fc 65%,#ff7bdb 85%,#3ee7ff 100%);
+    background:linear-gradient(100deg,#ff3d81 0%,#ff9d00 18%,#ffe066 36%,#00e5a0 54%,#2f9bff 72%,#a230ea 88%,#ff3d81 100%);
     background-size:300% auto;-webkit-background-clip:text;background-clip:text;color:transparent;
     animation:holo 6s linear infinite;}
   .logo{font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:0.02em;cursor:pointer;
-    filter:drop-shadow(0 0 10px rgba(150,120,255,0.35));}
+    filter:drop-shadow(0 0 12px rgba(255,61,129,0.25));}
   @keyframes holo{0%{background-position:0% 50%;}100%{background-position:300% 50%;}}
   .wrap{max-width:1040px;margin:0 auto;padding:28px 20px 60px;}
   .wallet-pill{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;background:var(--bg2);border:1px solid var(--border2);padding:7px 14px;border-radius:20px;color:var(--gold);}
@@ -99,13 +101,13 @@
   .hero h1{font-family:var(--display);font-size:44px;font-weight:800;line-height:1;margin-bottom:8px;}
   .hero p{color:var(--txt2);font-size:13px;max-width:560px;margin:0 auto;line-height:1.6;}
 
-  .card{background:var(--bg1);border:1px solid var(--border2);border-radius:8px;}
+  .card{background:var(--bg1);border:1px solid var(--border2);border-radius:8px;box-shadow:0 1px 3px rgba(20,10,40,0.05);}
 
   .festival-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:24px;}
-  .festival-card{background:var(--bg1);border:1px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:transform .22s cubic-bezier(0.16,1,0.3,1),border-color .15s;}
-  .festival-card.is-upcoming{cursor:default;opacity:0.6;}
-  .festival-card.is-upcoming:hover{transform:none;}
-  .festival-card:hover{transform:translateY(-4px);border-color:var(--border2);}
+  .festival-card{background:var(--bg1);border:1px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:transform .22s cubic-bezier(0.16,1,0.3,1),border-color .15s,box-shadow .22s;box-shadow:0 2px 8px rgba(20,10,40,0.06);}
+  .festival-card.is-upcoming{cursor:default;opacity:0.7;}
+  .festival-card.is-upcoming:hover{transform:none;box-shadow:0 2px 8px rgba(20,10,40,0.06);}
+  .festival-card:hover{transform:translateY(-4px);border-color:var(--border2);box-shadow:0 10px 26px rgba(20,10,40,0.12);}
   .festival-banner{height:80px;display:flex;align-items:flex-end;padding:12px 14px;}
   .festival-body{padding:14px 16px 16px;}
   .festival-body h3{font-family:var(--display);font-size:19px;font-weight:700;margin-bottom:4px;}
@@ -412,6 +414,24 @@ function renderDemo(){
   `;
 }
 
+// event_date is free text ("2026-10-17", "Oct. 2–4 & Oct. 9–11, 2026",
+// "2027 TBD", "Varies / next event dependent on city") — best-effort parse
+// to a sortable timestamp so the grid can show soonest-first. Anything
+// unparseable sorts to the very end rather than breaking the sort.
+function parseFestivalDate(raw){
+  if (!raw) return Infinity;
+  const iso = Date.parse(raw);
+  if (!isNaN(iso) && /^\d{4}-\d{2}-\d{2}/.test(raw.trim())) return iso;
+  const monthDayYear = raw.match(/([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:[–\-]\d{1,2})?.*?,?\s*(\d{4})/);
+  if (monthDayYear) {
+    const parsed = Date.parse(`${monthDayYear[1]} ${monthDayYear[2]}, ${monthDayYear[3]}`);
+    if (!isNaN(parsed)) return parsed;
+  }
+  const yearOnly = raw.match(/\b(20\d{2})\b/);
+  if (yearOnly) return Date.parse(`Jan 1, ${yearOnly[1]}`);
+  return Infinity;
+}
+
 function renderList(){
   clearDemoTimers();
   const app = document.getElementById('app');
@@ -429,7 +449,8 @@ function renderList(){
   fetch(`${API}/api/festivals`).then(r => r.json()).then(list => {
     const grid = document.getElementById('festival-grid');
     if (!list.length) { grid.innerHTML = '<div class="empty">No festivals live yet.</div>'; return; }
-    grid.innerHTML = list.map(f => {
+    const sorted = [...list].sort((a, b) => parseFestivalDate(a.event_date) - parseFestivalDate(b.event_date));
+    grid.innerHTML = sorted.map(f => {
       const isLive = f.status === 'live';
       const soldOut = isLive && f.tickets_awarded >= f.tickets_available;
       const tag = !isLive ? { cls: 'tag-upcoming', label: 'Upcoming' }
@@ -437,7 +458,7 @@ function renderList(){
                 : { cls: 'tag-live', label: 'Live' };
       return `
       <div class="festival-card ${!isLive ? 'is-upcoming' : ''}" ${isLive ? `onclick="navigate('#/f/${f.slug}')"` : ''}>
-        <div class="festival-banner" style="background:linear-gradient(135deg, ${f.banner_color}, #10101c);">
+        <div class="festival-banner" style="background:linear-gradient(135deg, ${f.banner_color}, #ffffff);">
           <span class="tag ${tag.cls}">${tag.label}</span>
         </div>
         <div class="festival-body">
