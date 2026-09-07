@@ -14,6 +14,28 @@ const UPCOMING_FESTIVALS = [
   { slug: "amber-fields-2026", name: "Amber Fields Festival", location: "Prescott Valley, AZ", event_date: "2026-11-14", banner_color: "#ff9d3d" },
   { slug: "north-static-2027", name: "North Static Festival", location: "Duluth, MN", event_date: "2027-01-23", banner_color: "#4da6ff" },
   { slug: "glasshouse-2027", name: "Glasshouse Festival", location: "Asheville, NC", event_date: "2027-03-06", banner_color: "#c084fc" },
+  // Real festivals, announced dates TBA lineup — added 2026-09-06.
+  { slug: "acl-festival", name: "ACL Festival", location: "Austin, TX", event_date: "Oct. 2–4 & Oct. 9–11, 2026", banner_color: "#ff3d81" },
+  { slug: "levitation", name: "Levitation", location: "Austin, TX", event_date: "Sept. 24–27, 2026", banner_color: "#c084fc" },
+  { slug: "austin-blues-festival", name: "Austin Blues Festival", location: "Austin, TX", event_date: "2027 dates TBD", banner_color: "#4da6ff" },
+  { slug: "sxsw-music", name: "SXSW Music", location: "Austin, TX", event_date: "Mar. 15–21, 2027", banner_color: "#ff9d3d" },
+  { slug: "two-step-inn", name: "Two Step Inn", location: "Georgetown, TX", event_date: "2027 dates TBD", banner_color: "#ffcf5c" },
+  { slug: "coachella", name: "Coachella", location: "Indio, CA", event_date: "Apr. 9–11 & Apr. 16–18, 2027", banner_color: "#ff3d81" },
+  { slug: "stagecoach", name: "Stagecoach", location: "Indio, CA", event_date: "Apr. 23–25, 2027", banner_color: "#4da6ff" },
+  { slug: "new-orleans-jazz-fest", name: "New Orleans Jazz Fest", location: "New Orleans, LA", event_date: "Apr. 22–25 & Apr. 29–May 2, 2027", banner_color: "#c084fc" },
+  { slug: "bottlerock", name: "BottleRock", location: "Napa, CA", event_date: "May 28–30, 2027", banner_color: "#ff9d3d" },
+  { slug: "edc-las-vegas", name: "EDC Las Vegas", location: "Las Vegas, NV", event_date: "May 21–23, 2027", banner_color: "#4da6ff" },
+  { slug: "governors-ball", name: "Governors Ball", location: "New York, NY", event_date: "2027 TBD", banner_color: "#ff3d81" },
+  { slug: "bonnaroo", name: "Bonnaroo", location: "Manchester, TN", event_date: "2027 TBD", banner_color: "#c084fc" },
+  { slug: "electric-forest", name: "Electric Forest", location: "Rothbury, MI", event_date: "2027 TBD", banner_color: "#4da6ff" },
+  { slug: "summerfest", name: "Summerfest", location: "Milwaukee, WI", event_date: "2027 TBD", banner_color: "#ff9d3d" },
+  { slug: "lollapalooza", name: "Lollapalooza", location: "Chicago, IL", event_date: "2027 TBD", banner_color: "#ff3d81" },
+  { slug: "outside-lands", name: "Outside Lands", location: "San Francisco, CA", event_date: "2027 TBD", banner_color: "#c084fc" },
+  { slug: "lost-lands", name: "Lost Lands", location: "Thornville, OH", event_date: "2027 TBD", banner_color: "#4da6ff" },
+  { slug: "when-we-were-young", name: "When We Were Young", location: "Las Vegas, NV", event_date: "2027 TBD", banner_color: "#ff9d3d" },
+  { slug: "rolling-loud", name: "Rolling Loud", location: "Various", event_date: "Varies / next event dependent on city", banner_color: "#ffcf5c" },
+  { slug: "ultra", name: "Ultra", location: "Miami, FL", event_date: "Mar. 26–28, 2027", banner_color: "#c084fc" },
+  { slug: "cma-fest", name: "CMA Fest", location: "Nashville, TN", event_date: "June 10–13, 2027", banner_color: "#4da6ff" },
 ];
 
 async function seed() {
