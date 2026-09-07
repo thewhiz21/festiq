@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FestiQ — Trivia Your Way Into The Lineup</title>
+<title>FestiQ — Festival Trivia Bingo to Win Real Tickets</title>
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
-<meta property="og:title" content="FestiQ — Trivia Your Way Into The Lineup">
-<meta property="og:description" content="Pick a festival, pick an artist, answer their trivia. Land a full line and win a ticket to the show.">
+<meta property="og:title" content="FestiQ — Festival Trivia Bingo to Win Real Tickets">
+<meta property="og:description" content="Play trivia bingo for ACL, Coachella, EDC and dozens more festivals. Clear a line of artist quizzes and win real festival tickets.">
 <meta property="og:image" content="/assets/logo-512.png">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="FestiQ — Trivia Your Way Into The Lineup">
-<meta name="twitter:description" content="Pick a festival, pick an artist, answer their trivia. Land a full line and win a ticket to the show.">
+<meta name="twitter:title" content="FestiQ — Festival Trivia Bingo to Win Real Tickets">
+<meta name="twitter:description" content="Play trivia bingo for ACL, Coachella, EDC and dozens more festivals. Clear a line of artist quizzes and win real festival tickets.">
 <meta name="twitter:image" content="/assets/logo-512.png">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Barlow+Condensed:wght@400;500;600;700;800&display=swap');
@@ -21,16 +21,17 @@
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 
   :root{
-    --bg:      #fffaf6;
-    --bg1:     #ffffff;
-    --bg2:     #fbf2ff;
-    --border:  rgba(20,10,40,0.08);
-    --border2: rgba(20,10,40,0.16);
+    --bg:      #fff3e6;
+    --bg1:     #fffdfa;
+    --bg2:     #fdf0ff;
+    --border:  rgba(20,10,40,0.1);
+    --border2: rgba(20,10,40,0.18);
     --green:   #00c896;
     --red:     #ff2d55;
     --gold:    #ff9d00;
     --blue:    #2f7bff;
     --purple:  #a230ea;
+    --pink:    #ff3d81;
     --txt:     #170b28;
     --txt2:    #6a5f85;
     --txt3:    #b3a8c9;
@@ -41,13 +42,15 @@
   html{height:100%;}
   body{
     height:100%;
-    background:#fffaf6;
+    background:#fff3e6;
     background-image:
-      radial-gradient(ellipse 70% 50% at 10% 0%, rgba(255,61,129,0.20) 0%, transparent 55%),
-      radial-gradient(ellipse 60% 45% at 90% 8%, rgba(47,123,255,0.18) 0%, transparent 55%),
-      radial-gradient(ellipse 55% 45% at 100% 60%, rgba(255,157,0,0.16) 0%, transparent 55%),
-      radial-gradient(ellipse 80% 60% at 30% 100%, rgba(162,48,234,0.16) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 40% at 0% 90%, rgba(0,200,150,0.14) 0%, transparent 55%);
+      radial-gradient(circle, rgba(20,10,40,0.05) 1px, transparent 1.4px),
+      radial-gradient(ellipse 75% 55% at 8% 0%, rgba(255,61,129,0.30) 0%, transparent 55%),
+      radial-gradient(ellipse 65% 50% at 92% 4%, rgba(47,123,255,0.26) 0%, transparent 55%),
+      radial-gradient(ellipse 60% 48% at 100% 62%, rgba(255,157,0,0.26) 0%, transparent 55%),
+      radial-gradient(ellipse 85% 65% at 26% 104%, rgba(162,48,234,0.26) 0%, transparent 60%),
+      radial-gradient(ellipse 55% 42% at 0% 92%, rgba(0,200,150,0.22) 0%, transparent 55%);
+    background-size:22px 22px, auto, auto, auto, auto, auto;
     background-attachment:fixed;
     color:var(--txt);
     font-family:var(--mono);
@@ -66,15 +69,15 @@
   @keyframes cardIn{from{opacity:0;transform:translateY(20px) scale(0.97);}to{opacity:1;transform:translateY(0) scale(1);}}
   .fade-up{animation:fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) forwards;}
 
-  .btn{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;border:1px solid var(--border2);background:transparent;color:var(--txt2);padding:9px 18px;cursor:pointer;transition:all .18s;border-radius:3px;}
+  .btn{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;border:1.5px solid var(--border2);background:var(--bg1);color:var(--txt2);padding:9px 18px;cursor:pointer;transition:all .18s;border-radius:20px;}
   .btn:hover{border-color:var(--txt);color:var(--txt);background:rgba(20,10,40,0.04);transform:translateY(-1px);}
-  .btn-green{border-color:var(--green);color:var(--green);}
-  .btn-green:hover{background:var(--green);color:#000;box-shadow:0 0 20px rgba(0,255,179,0.35);}
-  .btn-gold{border-color:var(--gold);color:var(--gold);}
-  .btn-gold:hover{background:var(--gold);color:#000;box-shadow:0 0 20px rgba(255,213,79,0.35);}
-  .btn-purple{border-color:var(--purple);color:var(--purple);}
-  .btn-purple:hover{background:var(--purple);color:#000;box-shadow:0 0 20px rgba(192,132,252,0.35);}
-  .btn:disabled{opacity:0.35;cursor:not-allowed;transform:none!important;}
+  .btn-green{border-color:var(--green);color:var(--green);box-shadow:0 2px 10px rgba(0,200,150,0.18);}
+  .btn-green:hover{background:var(--green);color:#04241c;box-shadow:0 0 20px rgba(0,200,150,0.45);}
+  .btn-gold{border-color:var(--gold);color:var(--gold);box-shadow:0 2px 10px rgba(255,157,0,0.2);}
+  .btn-gold:hover{background:var(--gold);color:#2b1500;box-shadow:0 0 20px rgba(255,157,0,0.5);}
+  .btn-purple{border-color:var(--purple);color:var(--purple);box-shadow:0 2px 10px rgba(162,48,234,0.18);}
+  .btn-purple:hover{background:var(--purple);color:#fff;box-shadow:0 0 20px rgba(162,48,234,0.5);}
+  .btn:disabled{opacity:0.35;cursor:not-allowed;transform:none!important;box-shadow:none!important;}
 
   input{font-family:var(--mono);font-size:12px;background:var(--bg2);border:1px solid var(--border2);color:var(--txt);padding:9px 13px;outline:none;transition:border-color .15s,box-shadow .15s;border-radius:3px;width:100%;}
   input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(77,166,255,0.12);}
@@ -85,32 +88,33 @@
   .tag-won{color:var(--gold);border-color:var(--gold);background:rgba(255,213,79,0.08);}
   .tag-upcoming{color:var(--txt2);border-color:var(--border2);background:rgba(20,10,40,0.04);}
 
-  .header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(255,250,246,0.88);backdrop-filter:blur(8px);z-index:50;}
+  .header{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;position:sticky;top:0;background:rgba(255,250,246,0.9);backdrop-filter:blur(8px);z-index:50;border-bottom:3px solid transparent;border-image:linear-gradient(90deg,#ff3d81,#ff9d00,#ffe066,#00e5a0,#2f9bff,#a230ea) 1;}
   .logo,.logo span{
     background:linear-gradient(100deg,#ff3d81 0%,#ff9d00 18%,#ffe066 36%,#00e5a0 54%,#2f9bff 72%,#a230ea 88%,#ff3d81 100%);
     background-size:300% auto;-webkit-background-clip:text;background-clip:text;color:transparent;
     animation:holo 6s linear infinite;}
-  .logo{font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:0.02em;cursor:pointer;
-    filter:drop-shadow(0 0 12px rgba(255,61,129,0.25));}
+  .logo{font-family:var(--display);font-size:26px;font-weight:800;letter-spacing:0.02em;cursor:pointer;
+    filter:drop-shadow(0 0 12px rgba(255,61,129,0.3));}
   @keyframes holo{0%{background-position:0% 50%;}100%{background-position:300% 50%;}}
   .wrap{max-width:1040px;margin:0 auto;padding:28px 20px 60px;}
-  .wallet-pill{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;background:var(--bg2);border:1px solid var(--border2);padding:7px 14px;border-radius:20px;color:var(--gold);}
+  .wallet-pill{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;background:var(--bg2);border:1px solid var(--border2);padding:7px 14px;border-radius:20px;color:var(--gold);box-shadow:0 2px 8px rgba(255,157,0,0.15);}
 
   .hero{text-align:center;margin-bottom:28px;}
-  .hero .eyebrow{font-size:10px;color:var(--purple);letter-spacing:0.16em;font-weight:700;margin-bottom:10px;text-transform:uppercase;}
-  .hero h1{font-family:var(--display);font-size:44px;font-weight:800;line-height:1;margin-bottom:8px;}
+  .hero .eyebrow{font-size:10px;color:var(--purple);letter-spacing:0.16em;font-weight:800;margin-bottom:10px;text-transform:uppercase;}
+  .hero h1{font-family:var(--display);font-size:48px;font-weight:800;line-height:0.98;margin-bottom:10px;text-shadow:0 2px 24px rgba(255,61,129,0.18);}
   .hero p{color:var(--txt2);font-size:13px;max-width:560px;margin:0 auto;line-height:1.6;}
 
   .card{background:var(--bg1);border:1px solid var(--border2);border-radius:8px;box-shadow:0 1px 3px rgba(20,10,40,0.05);}
 
-  .festival-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-top:24px;}
-  .festival-card{background:var(--bg1);border:1px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:transform .22s cubic-bezier(0.16,1,0.3,1),border-color .15s,box-shadow .22s;box-shadow:0 2px 8px rgba(20,10,40,0.06);}
-  .festival-card.is-upcoming{cursor:default;opacity:0.7;}
-  .festival-card.is-upcoming:hover{transform:none;box-shadow:0 2px 8px rgba(20,10,40,0.06);}
-  .festival-card:hover{transform:translateY(-4px);border-color:var(--border2);box-shadow:0 10px 26px rgba(20,10,40,0.12);}
-  .festival-banner{height:80px;display:flex;align-items:flex-end;padding:12px 14px;}
-  .festival-body{padding:14px 16px 16px;}
-  .festival-body h3{font-family:var(--display);font-size:19px;font-weight:700;margin-bottom:4px;}
+  .festival-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-top:24px;}
+  .festival-card{background:var(--bg1);border:1.5px solid var(--fc-accent,var(--border));border-radius:10px;overflow:hidden;cursor:pointer;transition:transform .22s cubic-bezier(0.16,1,0.3,1),border-color .15s,box-shadow .22s;box-shadow:0 4px 14px rgba(20,10,40,0.08);position:relative;}
+  .festival-card.is-upcoming{cursor:default;opacity:0.78;}
+  .festival-card.is-upcoming:hover{transform:none;box-shadow:0 4px 14px rgba(20,10,40,0.08);}
+  .festival-card:hover{transform:translateY(-5px) rotate(-0.4deg);box-shadow:0 16px 32px rgba(20,10,40,0.16),0 0 0 2px var(--fc-accent,var(--border2));}
+  .festival-banner{height:84px;display:flex;align-items:flex-end;padding:12px 14px;position:relative;}
+  .festival-banner::after{content:'';position:absolute;left:14px;right:14px;bottom:0;height:1px;background-image:radial-gradient(circle,rgba(255,255,255,0.9) 1.5px,transparent 1.6px);background-size:8px 100%;opacity:0.8;}
+  .festival-body{padding:16px 16px 16px;}
+  .festival-body h3{font-family:var(--display);font-size:20px;font-weight:700;margin-bottom:4px;}
   .festival-body .meta{font-size:11px;color:var(--txt2);margin-bottom:6px;}
 
   .stat-tile{flex:1;padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;text-align:center;}
@@ -127,16 +131,16 @@
   @keyframes breathe{0%,100%{box-shadow:0 0 0 1px var(--box-accent,var(--border2)),0 0 0 rgba(0,0,0,0);}50%{box-shadow:0 0 0 1px var(--box-accent,var(--border2)),0 0 16px 1px var(--box-glow,rgba(162,48,234,0.18));}}
   @keyframes stampIn{0%{transform:scale(2.2) rotate(-14deg);opacity:0;}60%{transform:scale(0.92) rotate(-4deg);opacity:1;}100%{transform:scale(1) rotate(-8deg);opacity:1;}}
   @keyframes deadShake{0%,100%{transform:translateX(0);}20%{transform:translateX(-3px) rotate(-1deg);}40%{transform:translateX(3px) rotate(1deg);}60%{transform:translateX(-2px);}80%{transform:translateX(2px);}}
-  .artist-box{position:relative;aspect-ratio:1;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px;cursor:pointer;transition:border-color .15s,transform .12s,opacity .2s,filter .2s,box-shadow .2s;background:var(--bg1);border:1px solid var(--box-accent,var(--border2));overflow:hidden;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both,breathe 2.8s ease-in-out infinite;}
-  .artist-box::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--box-accent,var(--purple));opacity:0.8;}
-  .artist-box:hover{transform:translateY(-3px) scale(1.02);}
-  .artist-box.cleared{background:linear-gradient(160deg,rgba(0,255,179,0.14),rgba(0,255,179,0.04));border-color:var(--green);cursor:default;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both;}
+  .artist-box{position:relative;aspect-ratio:1;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8px;cursor:pointer;transition:border-color .15s,transform .15s,opacity .2s,filter .2s,box-shadow .2s;background:linear-gradient(160deg,#fff 0%,var(--box-tint,var(--bg2)) 130%);border:2px solid var(--box-accent,var(--border2));overflow:hidden;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both,breathe 2.8s ease-in-out infinite;}
+  .artist-box::before{content:'';position:absolute;top:0;left:0;right:0;height:5px;background:var(--box-accent,var(--purple));opacity:0.9;}
+  .artist-box:hover{transform:translateY(-4px) scale(1.04) rotate(-1deg);box-shadow:0 12px 22px rgba(20,10,40,0.16);}
+  .artist-box.cleared{background:linear-gradient(160deg,rgba(0,255,179,0.2),rgba(0,255,179,0.05));border-color:var(--green);cursor:default;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both;}
   .artist-box.cleared::before{background:var(--green);opacity:1;}
-  .artist-box.dead{background:repeating-linear-gradient(135deg,rgba(255,51,85,0.09),rgba(255,51,85,0.09) 6px,rgba(255,51,85,0.03) 6px,rgba(255,51,85,0.03) 12px);border-color:var(--red);cursor:default;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both,deadShake .4s ease-in-out 1;filter:grayscale(0.55);}
+  .artist-box.dead{background:repeating-linear-gradient(135deg,rgba(255,51,85,0.12),rgba(255,51,85,0.12) 6px,rgba(255,51,85,0.04) 6px,rgba(255,51,85,0.04) 12px);border-color:var(--red);cursor:default;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both,deadShake .4s ease-in-out 1;filter:grayscale(0.55);}
   .artist-box.dead::before{background:var(--red);opacity:1;}
-  .artist-box.inline{box-shadow:0 0 0 2px var(--gold),0 0 16px rgba(255,213,79,0.3)!important;border-color:var(--gold)!important;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both;}
+  .artist-box.inline{box-shadow:0 0 0 2px var(--gold),0 0 18px rgba(255,213,79,0.35)!important;border-color:var(--gold)!important;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both;}
   .artist-box.dimmed{opacity:0.3;filter:grayscale(0.7);animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both;}
-  .artist-box .logo-badge{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:13px;color:#fff;margin-bottom:5px;background:var(--box-accent,var(--purple));box-shadow:0 2px 6px rgba(20,10,40,0.18);flex-shrink:0;}
+  .artist-box .logo-badge{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:14px;color:#fff;margin-bottom:5px;background:var(--box-accent,var(--purple));box-shadow:0 3px 8px rgba(20,10,40,0.22),0 0 0 3px #fff;flex-shrink:0;}
   .artist-box.dead .logo-badge{filter:grayscale(1);opacity:0.6;}
   .artist-box .status-stamp{position:absolute;top:4px;right:4px;font-size:15px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.2));}
   .artist-box.cleared .status-stamp{animation:stampIn .4s cubic-bezier(0.16,1,0.3,1) both;}
@@ -211,14 +215,16 @@
   .countdown .cd-unit .cd-num{font-family:var(--display);font-size:18px;font-weight:800;line-height:1;}
   .countdown .cd-unit .cd-lbl{font-size:7.5px;letter-spacing:0.08em;color:var(--txt2);text-transform:uppercase;}
 
-  .trust-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:24px 0 30px;}
-  .trust-strip .trust-item{text-align:center;padding:14px 10px;}
-  .trust-strip .trust-icon{font-size:22px;margin-bottom:6px;}
+  .trust-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin:24px 0 30px;}
+  .trust-strip .trust-item{text-align:center;padding:16px 10px;background:var(--bg1);border:1px solid var(--border);border-radius:12px;box-shadow:0 3px 10px rgba(20,10,40,0.05);}
+  .trust-strip .trust-icon{width:42px;height:42px;line-height:42px;border-radius:50%;font-size:20px;margin:0 auto 8px;background:linear-gradient(135deg,var(--pink),var(--purple));box-shadow:0 4px 12px rgba(255,61,129,0.3);}
+  .trust-strip .trust-item:nth-child(2) .trust-icon{background:linear-gradient(135deg,var(--blue),var(--green));box-shadow:0 4px 12px rgba(47,123,255,0.3);}
+  .trust-strip .trust-item:nth-child(3) .trust-icon{background:linear-gradient(135deg,var(--gold),var(--pink));box-shadow:0 4px 12px rgba(255,157,0,0.3);}
   .trust-strip .trust-title{font-family:var(--display);font-size:13px;font-weight:700;margin-bottom:3px;}
   .trust-strip .trust-sub{font-size:10.5px;color:var(--txt2);line-height:1.4;}
 
-  .section-label{font-size:11px;color:var(--txt2);letter-spacing:0.14em;font-weight:700;text-transform:uppercase;margin:30px 0 12px;display:flex;align-items:center;gap:8px;}
-  .section-label::after{content:'';flex:1;height:1px;background:var(--border);}
+  .section-label{font-size:11px;color:var(--txt2);letter-spacing:0.14em;font-weight:800;text-transform:uppercase;margin:30px 0 12px;display:flex;align-items:center;gap:8px;}
+  .section-label::after{content:'';flex:1;height:2px;background:linear-gradient(90deg,var(--pink),var(--gold),var(--purple),transparent);opacity:0.4;}
 
   .lineup-poster{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:22px;}
   .lineup-chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;background:var(--bg1);border:1px solid var(--border2);padding:6px 12px;border-radius:20px;}
@@ -239,7 +245,7 @@
 <body>
 
 <div class="header">
-  <div class="logo" onclick="navigate('#/')">FESTI<span>Q</span></div>
+  <div class="logo" onclick="navigate('/')">FESTI<span>Q</span></div>
   <div style="display:flex;align-items:center;gap:10px;">
     <div id="wallet-pill" class="wallet-pill" style="display:none;">🎟️ <span id="wallet-tokens">0</span> TOKENS</div>
     <button class="btn" id="auth-btn" onclick="openAuthModal()">LOG IN</button>
@@ -373,33 +379,48 @@ function submitAuth(){
 function logout(){
   token = null; user = null;
   localStorage.removeItem('festiq_token'); localStorage.removeItem('festiq_user');
-  updateAuthUI(); navigate('#/');
+  updateAuthUI(); navigate('/');
 }
 
 // ─── Routing ────────────────────────────────────────────────────────────────
+// Real paths (/festival/slug), not hash fragments — hash routes are invisible
+// to search engines and to link-preview scrapers, and don't give each
+// festival a real, bookmarkable, shareable URL. history.pushState swaps the
+// URL with no full reload; the server (see server.js) renders the exact same
+// shell at each real path too, so a fresh visit or a share link both work.
 
-function navigate(hash){ window.location.hash = hash; }
-window.addEventListener('hashchange', render);
+function navigate(path){
+  if (window.location.pathname === path) return;
+  history.pushState({}, '', path);
+  render();
+}
+window.addEventListener('popstate', render);
+
+// Renamed slugs redirect server-side (see LEGACY_SLUG_REDIRECTS in
+// server.js) for a fresh page load; this client-side copy only matters for
+// the hash-cleanup path just below, which never hits the server.
+const LEGACY_SLUG_REDIRECTS = { 'acl-festival': 'austin-city-limits' };
 
 function render(){
-  const hash = window.location.hash || '#/';
-  if (hash.startsWith('#/f/')) renderFestival(hash.slice(4));
-  else if (!window.location.hash && window.__FESTIQ_INITIAL_SLUG) {
-    const slug = window.__FESTIQ_INITIAL_SLUG;
-    window.__FESTIQ_INITIAL_SLUG = null; // one-shot — only on the very first (server-rendered) load
-    renderFestival(slug);
+  // One-time cleanup for old-style shared links (#/f/slug) from before real
+  // paths existed — send them to the real URL instead of just rendering it,
+  // so the address bar is correct going forward too.
+  if (window.location.hash.startsWith('#/f/')) {
+    const slug = window.location.hash.slice(4);
+    history.replaceState({}, '', '/festival/' + (LEGACY_SLUG_REDIRECTS[slug] || slug));
   }
+  const path = window.location.pathname;
+  if (path.startsWith('/festival/')) renderFestival(decodeURIComponent(path.slice('/festival/'.length)));
   else renderList();
 }
 
-// Real <a href> on every festival card/link so right-click → copy link,
-// middle-click, and crawlers all get the real server-rendered /festival/:slug
-// page (see server.js). A plain left-click still short-circuits into the
-// fast, no-reload hash route for anyone already in the app.
-function handleFestivalLinkClick(e, slug){
+// A plain left-click on a real <a href="/festival/slug"> intercepts into
+// pushState (no reload); ctrl/cmd/shift/middle-click still opens normally
+// (new tab, etc.) since those never reach preventDefault.
+function handleFestivalLinkClick(e, path){
   if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return true;
   e.preventDefault();
-  navigate('#/f/' + slug);
+  navigate(path);
   return false;
 }
 
@@ -441,7 +462,7 @@ function spotlightHTML(list){
   if (!f) return '';
   const cd = countdownHTML(f.event_date);
   return `
-    <a href="/festival/${f.slug}" onclick="return handleFestivalLinkClick(event,'${f.slug}')" class="spotlight" style="--spot-bg:linear-gradient(120deg, ${f.banner_color || '#ff3d81'}, #a230ea);">
+    <a href="/festival/${f.slug}" onclick="return handleFestivalLinkClick(event,'/festival/${f.slug}')" class="spotlight" style="--spot-bg:linear-gradient(120deg, ${f.banner_color || '#ff3d81'}, #a230ea);">
       <div class="spot-eyebrow">⚡ ${f.status === 'live' ? "PLAYING NOW" : "UP NEXT"}</div>
       <div class="spot-name">${f.name}</div>
       <div class="spot-meta">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''} ${f.status === 'live' ? `· 🎁 ${f.ticket_prize_label || 'Ticket prize'}` : '· Lineup drops soon'}</div>
@@ -549,12 +570,12 @@ function parseFestivalDate(raw){
 
 function renderList(){
   clearDemoTimers();
-  document.title = 'FestiQ — Trivia Your Way Into The Lineup';
+  document.title = 'FestiQ — Festival Trivia Bingo to Win Real Tickets';
   const app = document.getElementById('app');
   app.innerHTML = `
     <div class="hero">
-      <div class="eyebrow">Play Anytime · Festival Trivia</div>
-      <h1>WIN A <span style="color:var(--gold);">TICKET</span> TO THE SHOW</h1>
+      <div class="eyebrow">Festival Trivia Bingo · Play Anytime</div>
+      <h1>WIN REAL <span style="color:var(--gold);">FESTIVAL TICKETS</span> PLAYING TRIVIA BINGO</h1>
       <p>Pick a festival, pick an artist on the lineup, answer their trivia. Land a full row, column, or diagonal and you win a ticket — no luck of the draw, just knowing the lineup.</p>
     </div>
     ${trustStripHTML()}
@@ -580,17 +601,17 @@ function renderList(){
       const cd = daysHoursUntil(f.event_date);
       return `
       <a class="festival-card ${!isLive ? 'is-upcoming' : ''}" href="/festival/${f.slug}"
-         ${isLive ? `onclick="return handleFestivalLinkClick(event,'${f.slug}')"` : `onclick="return false;"`}
-         style="text-decoration:none;color:inherit;">
-        <div class="festival-banner" style="background:linear-gradient(135deg, ${f.banner_color}, #ffffff);">
-          <span class="tag ${tag.cls}">${tag.label}</span>
+         ${isLive ? `onclick="return handleFestivalLinkClick(event,'/festival/${f.slug}')"` : `onclick="return false;"`}
+         style="text-decoration:none;color:inherit;--fc-accent:${f.banner_color};">
+        <div class="festival-banner" style="background:linear-gradient(135deg, ${f.banner_color}, ${f.banner_color}dd 40%, #ffffff 130%);">
+          <span class="tag ${tag.cls}" style="background:rgba(255,255,255,0.85);">${tag.label}</span>
         </div>
         <div class="festival-body">
           <h3>${f.name}</h3>
           <div class="meta">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}${cd ? ` · in ${cd.days}d` : ''}</div>
           ${isLive
             ? `<div class="meta">${f.lineup_count} artists on the board · 🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'}/try</div>
-               <div class="meta" style="color:var(--gold);font-weight:700;">🎁 ${f.ticket_prize_label} · up to ${f.tickets_available} ticket${f.tickets_available === 1 ? '' : 's'}</div>`
+               <div class="meta" style="display:inline-flex;align-items:center;gap:5px;color:var(--gold);font-weight:800;background:rgba(255,157,0,0.1);padding:4px 9px;border-radius:20px;">🎁 ${f.ticket_prize_label} · up to ${f.tickets_available} ticket${f.tickets_available === 1 ? '' : 's'}</div>`
             : `<div class="meta">Lineup drops soon</div>`}
         </div>
       </a>
@@ -668,12 +689,13 @@ function renderFestival(slug){
     const linesCompleted = f.board ? f.board.lines_completed : 0;
     const maxTiers = f.board ? f.board.max_tiers : 2;
     const clearedCount = cells.filter(c => c.status === 'cleared').length;
-    document.title = `${f.name} Trivia — Win ${f.ticket_prize_label || 'a Ticket'} | FestiQ`;
+    document.title = `${f.name} Trivia Bingo — Win ${f.name} Tickets | FestiQ`;
     const eventCd = daysHoursUntil(f.event_date);
 
     app.innerHTML = `
-      <a href="/" onclick="return handleFestivalLinkClick(event,'')" class="backlink">← ALL FESTIVALS</a>
+      <a href="/" onclick="return handleFestivalLinkClick(event,'/')" class="backlink">← ALL FESTIVALS</a>
       <div style="text-align:center;margin:18px 0 20px;">
+        <div style="font-size:10px;color:var(--purple);letter-spacing:0.16em;font-weight:800;margin-bottom:6px;text-transform:uppercase;">Festival Trivia Bingo</div>
         <div class="eyebrow" style="font-size:10px;color:var(--gold);letter-spacing:0.14em;font-weight:700;margin-bottom:8px;text-transform:uppercase;">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
         <div style="font-family:var(--display);font-size:36px;font-weight:800;line-height:1;margin-bottom:8px;">${f.name}</div>
         <div style="font-size:12.5px;color:var(--txt2);max-width:520px;margin:0 auto 12px;">Clear any row, column, or diagonal of artist trivia to win ${f.ticket_prize_label}. One shot per artist — hard on purpose.</div>
@@ -742,17 +764,17 @@ function artistInitials(name){
 }
 function artistAccent(name){
   const hue = hashHue(name);
-  return { accent: `hsl(${hue},70%,52%)`, glow: `hsla(${hue},85%,60%,0.35)` };
+  return { accent: `hsl(${hue},70%,52%)`, glow: `hsla(${hue},85%,60%,0.35)`, tint: `hsl(${hue},85%,95%)` };
 }
 
 function renderBoardGrid(cells, gridSize){
   const grid = document.getElementById('board-grid');
   const sorted = [...cells].sort((a,b) => a.position - b.position);
   grid.innerHTML = sorted.map((c, i) => {
-    const { accent, glow } = artistAccent(c.name);
+    const { accent, glow, tint } = artistAccent(c.name);
     const stamp = c.status === 'cleared' ? '✅' : c.status === 'dead' ? '💀' : '';
     return `
-    <div class="artist-box ${c.status}" data-pos="${c.position}" style="--box-accent:${accent};--box-glow:${glow};animation-delay:${Math.min(i * 35, 400)}ms;"
+    <div class="artist-box ${c.status}" data-pos="${c.position}" style="--box-accent:${accent};--box-glow:${glow};--box-tint:${tint};animation-delay:${Math.min(i * 35, 400)}ms;"
          onmouseenter="hoverLine(${c.position}, ${gridSize})" onmouseleave="clearHoverLine()"
          onclick="handleBoxClick(${c.artist_id}, '${c.status}')">
       ${stamp ? `<div class="status-stamp">${stamp}</div>` : ''}

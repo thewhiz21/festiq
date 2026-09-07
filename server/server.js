@@ -123,15 +123,25 @@ app.get("/sitemap.xml", async (req, res) => {
 // search engines and to link-preview scrapers (iMessage, Slack, Twitter,
 // Facebook — none of which execute JS). This route gives each festival a
 // real path with server-rendered <title>/OG/Twitter meta and JSON-LD Event
-// structured data baked in, then hands off to the normal SPA by setting the
-// URL hash — so a human visiting the link gets the exact same app, while a
-// crawler or scraper sees real, specific content before any JS runs.
+// structured data baked in. The client renders off window.location.pathname
+// directly (see the router in index.html), so this is just the same SPA
+// shell served at a real, stable URL — a human and a crawler/scraper both
+// land on the same page, no redirect or hash trick needed.
 function escapeHtml(str) {
   return String(str || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// Renamed slugs (moved to a more readable, SEO-friendly URL) redirect
+// permanently so old shared links and bookmarks keep working.
+const LEGACY_SLUG_REDIRECTS = {
+  "acl-festival": "austin-city-limits",
+};
+
 app.get("/festival/:slug", async (req, res, next) => {
   try {
+    if (LEGACY_SLUG_REDIRECTS[req.params.slug]) {
+      return res.redirect(301, `/festival/${LEGACY_SLUG_REDIRECTS[req.params.slug]}`);
+    }
     const { rows } = await pool.query(`SELECT * FROM festivals WHERE slug = $1`, [req.params.slug]);
     const f = rows[0];
     if (!f) return next(); // no such festival — fall through to the SPA's own "not found" UI
@@ -139,12 +149,12 @@ app.get("/festival/:slug", async (req, res, next) => {
 
     const base = `${req.protocol}://${req.get("host")}`;
     const title = f.status === "live"
-      ? `${f.name} Trivia — Win ${f.ticket_prize_label || "a Ticket"} | FestiQ`
-      : `${f.name} — Coming to FestiQ`;
+      ? `${f.name} Trivia Bingo — Win ${f.name} Tickets | FestiQ`
+      : `${f.name} Trivia Bingo — Coming Soon | FestiQ`;
     const lineupNames = artists.map((a) => a.name).join(", ");
     const description = f.status === "live"
-      ? `Play free festival trivia for ${f.name}${f.location ? " in " + f.location : ""}. Clear a row of artist quizzes — ${lineupNames ? "featuring " + lineupNames.slice(0, 180) + (lineupNames.length > 180 ? "…" : "") : "full lineup on the board"} — and win ${f.ticket_prize_label || "a ticket"}.`
-      : `${f.name}${f.location ? " · " + f.location : ""}${f.event_date ? " · " + f.event_date : ""}. Lineup and trivia board drop soon on FestiQ.`;
+      ? `Play free ${f.name} trivia bingo${f.location ? " in " + f.location : ""}. Clear a row of artist quizzes — ${lineupNames ? "featuring " + lineupNames.slice(0, 180) + (lineupNames.length > 180 ? "…" : "") : "full lineup on the board"} — and win ${f.ticket_prize_label || "a ticket"} to ${f.name}.`
+      : `${f.name}${f.location ? " · " + f.location : ""}${f.event_date ? " · " + f.event_date : ""}. The ${f.name} trivia bingo board and lineup drop soon on FestiQ.`;
     const ogImage = `${base}/assets/logo-512.png`;
     const canonical = `${base}/festival/${f.slug}`;
 
@@ -179,7 +189,6 @@ app.get("/festival/:slug", async (req, res, next) => {
 <meta property="og:url" content="${canonical}">
 <script type="application/ld+json">${JSON.stringify(jsonLd)}</script>
 <noscript><h1>${escapeHtml(f.name)}</h1><p>${escapeHtml(description)}</p>${artists.length ? `<h2>Lineup</h2><ul>${artists.map((a) => `<li>${escapeHtml(a.name)}${a.genre ? " — " + escapeHtml(a.genre) : ""}</li>`).join("")}</ul>` : ""}</noscript>
-<script>window.__FESTIQ_INITIAL_SLUG = ${JSON.stringify(f.slug)};</script>
 </head>`);
     res.send(html);
   } catch (err) {
@@ -325,7 +334,8 @@ app.get("/api/festivals", async (req, res) => {
 
 app.get("/api/festivals/:slug", async (req, res) => {
   try {
-    const { rows: fRows } = await pool.query(`SELECT * FROM festivals WHERE slug = $1`, [req.params.slug]);
+    const slug = LEGACY_SLUG_REDIRECTS[req.params.slug] || req.params.slug;
+    const { rows: fRows } = await pool.query(`SELECT * FROM festivals WHERE slug = $1`, [slug]);
     const festival = fRows[0];
     if (!festival) return res.status(404).json({ error: "Festival not found" });
     const { rows: artists } = await pool.query(`SELECT * FROM artists WHERE festival_id = $1 ORDER BY position ASC`, [festival.id]);

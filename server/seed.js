@@ -15,7 +15,7 @@ const UPCOMING_FESTIVALS = [
   { slug: "north-static-2027", name: "North Static Festival", location: "Duluth, MN", event_date: "2027-01-23", banner_color: "#4da6ff" },
   { slug: "glasshouse-2027", name: "Glasshouse Festival", location: "Asheville, NC", event_date: "2027-03-06", banner_color: "#c084fc" },
   // Real festivals, announced dates TBA lineup — added 2026-09-06.
-  { slug: "acl-festival", name: "ACL Festival", location: "Austin, TX", event_date: "Oct. 2–4 & Oct. 9–11, 2026", banner_color: "#ff3d81" },
+  { slug: "austin-city-limits", name: "ACL Festival", location: "Austin, TX", event_date: "Oct. 2–4 & Oct. 9–11, 2026", banner_color: "#ff3d81" },
   { slug: "levitation", name: "Levitation", location: "Austin, TX", event_date: "Sept. 24–27, 2026", banner_color: "#c084fc" },
   { slug: "austin-blues-festival", name: "Austin Blues Festival", location: "Austin, TX", event_date: "2027 dates TBD", banner_color: "#4da6ff" },
   { slug: "sxsw-music", name: "SXSW Music", location: "Austin, TX", event_date: "Mar. 15–21, 2027", banner_color: "#ff9d3d" },
