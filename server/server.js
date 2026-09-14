@@ -60,12 +60,29 @@ function parseCookies(header) {
   return out;
 }
 
+// Known search-engine and link-preview crawler user agents. These are let
+// straight through the pre-launch gate (see below) so the real, indexable
+// pages start getting crawled and ranked *before* SITE_LOCKED flips off —
+// only human visitors without the preview cookie see coming-soon.html.
+// Deliberately user-agent based (not IP-based): good enough for legitimate
+// crawlers, which all self-identify this way, and doesn't require an IP
+// allowlist that would need constant upkeep.
+const CRAWLER_USER_AGENT_PATTERN =
+  /googlebot|google-inspectiontool|bingbot|slurp|duckduckbot|baiduspider|yandexbot|sogou|exabot|applebot|petalbot|bytespider|facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|whatsapp|telegrambot|pinterestbot|redditbot|gptbot|oai-searchbot|chatgpt-user|perplexitybot|claudebot|anthropic-ai|google-extended/i;
+
+function isKnownCrawler(userAgent) {
+  return CRAWLER_USER_AGENT_PATTERN.test(userAgent || "");
+}
+
 app.use((req, res, next) => {
   if (
     !siteSettings.site_locked ||
     req.path.startsWith("/api/") ||
     req.path.startsWith("/assets/") ||
-    req.path.startsWith("/admin")
+    req.path.startsWith("/admin") ||
+    req.path === "/robots.txt" ||
+    req.path === "/sitemap.xml" ||
+    isKnownCrawler(req.headers["user-agent"])
   )
     return next();
 
@@ -93,20 +110,19 @@ app.use((req, res, next) => {
 app.get("/admin", (req, res) => res.sendFile(path.join(__dirname, "..", "public", "admin.html")));
 
 // ─── SEO: robots.txt + sitemap.xml ───────────────────────────────────────────
+// These are always open, even while site_locked gates human visitors behind
+// coming-soon.html — that's the whole point of letting crawlers through the
+// gate above: robots.txt and the sitemap need to say "come on in" or the
+// crawl bypass is pointless. Nothing here is gated on site_locked anymore.
 app.get("/robots.txt", (req, res) => {
   res.type("text/plain");
-  if (siteSettings.site_locked) {
-    res.send("User-agent: *\nDisallow: /\n");
-  } else {
-    res.send(`User-agent: *\nAllow: /\n\nSitemap: ${req.protocol}://${req.get("host")}/sitemap.xml\n`);
-  }
+  res.send(`User-agent: *\nAllow: /\n\nSitemap: ${req.protocol}://${req.get("host")}/sitemap.xml\n`);
 });
 
 app.get("/sitemap.xml", async (req, res) => {
   try {
     const base = `${req.protocol}://${req.get("host")}`;
     res.type("application/xml");
-    if (siteSettings.site_locked) return res.send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>`);
     const { rows: festivals } = await pool.query(`SELECT slug, status FROM festivals ORDER BY event_date ASC`);
     const urls = [
       `<url><loc>${base}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>`,
