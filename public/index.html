@@ -1002,6 +1002,8 @@ function renderFestival(slug){
 
         ${tierExplainerHTML(f)}
 
+        ${renderDemo()}
+
         <div class="section-label">Full Lineup</div>
         <div class="lineup-poster">
           <span class="lineup-chip" style="opacity:0.55;">🎫 Lineup announcement coming soon</span>
@@ -1014,6 +1016,7 @@ function renderFestival(slug){
         <div class="footer-note">Once the lineup is announced, each square becomes a real artist you can challenge for ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} a try.</div>
       `;
       renderBoardGrid(pendingCells, f.grid_size, false);
+      runDemo();
       return;
     }
 
@@ -1035,6 +1038,8 @@ function renderFestival(slug){
       ${!isLive ? `<div class="banner-block" style="background:rgba(20,10,40,0.05);border:2px dashed var(--border2);color:var(--txt2);">🔒 UPCOMING — this board is locked for preview. Come back closer to ${f.event_date || 'the event'} to play it for real.</div>` : ''}
 
       ${tierExplainerHTML(f)}
+
+      ${renderDemo()}
 
       <div class="section-label">Full Lineup</div>
       <div class="lineup-poster">
@@ -1081,6 +1086,7 @@ function renderFestival(slug){
     }
 
     renderBoardGrid(cells, f.grid_size, !isLive);
+    runDemo();
   });
 }
 
