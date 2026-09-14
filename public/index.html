@@ -969,6 +969,35 @@ function tierExplainerHTML(f){
   `;
 }
 
+// Compact pricing preview embedded on each festival page — mirrors
+// PropQuix Solo's TokenPricingPreview on /solo: same TOKEN_PACKS data the
+// Token Shop modal and /pricing use, just previewed in place with a link
+// through to the full purchase flow rather than duplicating it.
+function tokenPricingPreviewHTML(){
+  return `
+    <div style="margin-bottom:28px;">
+      <div style="text-align:center;margin-bottom:16px;">
+        <div style="font-size:10px;color:var(--gold);letter-spacing:0.12em;font-weight:700;text-transform:uppercase;margin-bottom:6px;">🪙 Token Center</div>
+        <div style="font-size:12px;color:var(--txt2);max-width:520px;margin:0 auto;">Buy a stack of tokens once — spend them on this board, or any festival's board, whenever you want. Your balance carries over.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;">
+        ${TOKEN_PACKS.map(p => `
+          <div class="pack-card" style="--pk-accent:${p.color};--pk-tint:${p.tint};" onclick="openTokenShop()">
+            ${p.badge ? `<div class="pk-badge">${p.badge}</div>` : ''}
+            <div class="pk-tokens">🎟️ ${p.tokens}</div>
+            <div class="pk-label">${p.label}</div>
+            <div class="pk-price">$${p.price}</div>
+            ${p.bonusPct ? `<div class="pk-bonus">+${p.bonusPct}% bonus tokens</div>` : ''}
+          </div>
+        `).join('')}
+      </div>
+      <div style="text-align:center;margin-top:14px;">
+        <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')" class="btn" style="text-decoration:none;display:inline-block;">VIEW TOKEN CENTER →</a>
+      </div>
+    </div>
+  `;
+}
+
 function renderFestival(slug){
   clearDemoTimers();
   const app = document.getElementById('app');
@@ -1000,6 +1029,9 @@ function renderFestival(slug){
 
         <div class="banner-block" style="background:rgba(162,48,234,0.06);border:2px dashed var(--purple);color:var(--purple);">🎪 LINEUP COMING SOON — check back closer to ${f.event_date || 'the event'} to see who's playing.</div>
 
+        <div style="font-size:10px;color:var(--txt2);letter-spacing:0.12em;font-weight:700;text-transform:uppercase;margin-bottom:12px;text-align:center;">🎯 The Board — ${f.grid_size}×${f.grid_size}, lineup TBA</div>
+        <div class="board-grid" id="board-grid" style="grid-template-columns:repeat(${f.grid_size},1fr);"></div>
+
         ${tierExplainerHTML(f)}
 
         ${renderDemo()}
@@ -1009,10 +1041,8 @@ function renderFestival(slug){
           <span class="lineup-chip" style="opacity:0.55;">🎫 Lineup announcement coming soon</span>
         </div>
 
-        <div style="font-size:11px;color:var(--txt2);letter-spacing:0.1em;font-weight:600;margin-bottom:10px;text-transform:uppercase;">
-          The board — ${f.grid_size}×${f.grid_size}, lineup TBA
-        </div>
-        <div class="board-grid" id="board-grid" style="grid-template-columns:repeat(${f.grid_size},1fr);"></div>
+        ${tokenPricingPreviewHTML()}
+
         <div class="footer-note">Once the lineup is announced, each square becomes a real artist you can challenge for ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} a try.</div>
       `;
       renderBoardGrid(pendingCells, f.grid_size, false);
@@ -1037,15 +1067,6 @@ function renderFestival(slug){
 
       ${!isLive ? `<div class="banner-block" style="background:rgba(20,10,40,0.05);border:2px dashed var(--border2);color:var(--txt2);">🔒 UPCOMING — this board is locked for preview. Come back closer to ${f.event_date || 'the event'} to play it for real.</div>` : ''}
 
-      ${tierExplainerHTML(f)}
-
-      ${renderDemo()}
-
-      <div class="section-label">Full Lineup</div>
-      <div class="lineup-poster">
-        ${[...cells].sort((a,b) => a.position - b.position).map(c => `<span class="lineup-chip ${c.status === 'cleared' ? 'is-cleared' : c.status === 'dead' ? 'is-dead' : ''}">${c.status === 'cleared' ? '✅ ' : c.status === 'dead' ? '💀 ' : '🎤 '}${c.name}${c.genre ? ` <span class="lc-genre">· ${c.genre}</span>` : ''}</span>`).join('')}
-      </div>
-
       ${isLive && linesCompleted >= 1 ? `<div class="banner-block banner-gold">🎉 You've won ${linesCompleted} ticket${linesCompleted === 1 ? '' : 's'} on this board! ${linesCompleted < maxTiers ? 'Keep going for another line.' : 'Max tickets reached — board complete.'}</div>` : ''}
 
       ${isLive ? `
@@ -1062,8 +1083,8 @@ function renderFestival(slug){
                : `<button class="btn btn-purple" style="flex:1;" onclick="openAuthModal()">LOG IN TO PLAY →</button>`}
       </div>` : ''}
 
-      <div style="font-size:11px;color:var(--txt2);letter-spacing:0.1em;font-weight:600;margin-bottom:10px;text-transform:uppercase;">
-        The board — 🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist, one shot each${!isLive ? ' · locked until live' : ''}
+      <div style="font-size:10px;color:var(--txt2);letter-spacing:0.12em;font-weight:700;text-transform:uppercase;margin-bottom:12px;text-align:center;">
+        🎯 The Board — ${isLive ? 'hover a square to see how a line lights up' : `🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist, one shot each · locked until live`}
       </div>
       ${isLive ? `<div class="board-legend">
         <span><span class="lg-dot" style="background:var(--purple);"></span>${cells.filter(c => c.status === 'available').length} available — tap to play</span>
@@ -1071,6 +1092,18 @@ function renderFestival(slug){
         <span><span class="lg-dot" style="background:var(--red);"></span>${cells.filter(c => c.status === 'dead').length} dead — no retry</span>
       </div>` : ''}
       <div class="board-grid ${!isLive ? 'is-locked' : ''}" id="board-grid" style="grid-template-columns:repeat(${f.grid_size},1fr);"></div>
+
+      ${tierExplainerHTML(f)}
+
+      ${renderDemo()}
+
+      <div class="section-label">Full Lineup</div>
+      <div class="lineup-poster">
+        ${[...cells].sort((a,b) => a.position - b.position).map(c => `<span class="lineup-chip ${c.status === 'cleared' ? 'is-cleared' : c.status === 'dead' ? 'is-dead' : ''}">${c.status === 'cleared' ? '✅ ' : c.status === 'dead' ? '💀 ' : '🎤 '}${c.name}${c.genre ? ` <span class="lc-genre">· ${c.genre}</span>` : ''}</span>`).join('')}
+      </div>
+
+      ${tokenPricingPreviewHTML()}
+
       <div class="footer-note">${isLive ? `Entry costs ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist attempt. Fail and that artist is dead for this board — no retries.` : `This board opens for real attempts once FestiQ marks ${f.name} live.`}</div>
     `;
 
