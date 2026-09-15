@@ -1014,6 +1014,10 @@ function renderFestival(slug){
     const titleYearMatch = String(f.event_date || '').match(/\b(20\d{2})\b/);
     const titleYear = titleYearMatch ? ' ' + titleYearMatch[1] : '';
     document.title = `Win ${f.name}${titleYear} Tickets Playing Trivia Bingo | FestiQ`;
+    // Same phrase as the tab title, shown as the on-page headline so the
+    // "win tickets" intent that brought someone here is the first thing
+    // they read, not just something buried in the tab.
+    const pageHeadlineHTML = `WIN <span style="color:var(--gold);">${f.name}${titleYear} TICKETS</span> PLAYING TRIVIA BINGO`;
     const eventCd = daysHoursUntil(f.event_date);
 
     // A festival with no lineup entered yet still gets the real room — full
@@ -1028,7 +1032,7 @@ function renderFestival(slug){
         <div style="text-align:center;margin:18px 0 20px;">
           <div style="font-size:10px;color:var(--purple);letter-spacing:0.16em;font-weight:800;margin-bottom:6px;text-transform:uppercase;">Festival Trivia Bingo</div>
           <div class="eyebrow" style="font-size:10px;color:var(--gold);letter-spacing:0.14em;font-weight:700;margin-bottom:8px;text-transform:uppercase;">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
-          <div style="font-family:var(--display);font-size:36px;font-weight:800;line-height:1;margin-bottom:8px;">${f.name}</div>
+          <h1 style="font-family:var(--display);font-size:26px;font-weight:800;line-height:1.15;margin-bottom:8px;">${pageHeadlineHTML}</h1>
           <div style="font-size:12.5px;color:var(--txt2);max-width:520px;margin:0 auto 12px;">The lineup isn't announced yet — once it drops, every square below fills in with a real artist to challenge.</div>
           ${eventCd ? `<div style="display:flex;justify-content:center;">${countdownHTML(f.event_date)}</div>` : ''}
         </div>
@@ -1066,7 +1070,7 @@ function renderFestival(slug){
       <div style="text-align:center;margin:18px 0 20px;">
         <div style="font-size:10px;color:var(--purple);letter-spacing:0.16em;font-weight:800;margin-bottom:6px;text-transform:uppercase;">Festival Trivia Bingo</div>
         <div class="eyebrow" style="font-size:10px;color:var(--gold);letter-spacing:0.14em;font-weight:700;margin-bottom:8px;text-transform:uppercase;">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}</div>
-        <div style="font-family:var(--display);font-size:36px;font-weight:800;line-height:1;margin-bottom:8px;">${f.name}</div>
+        <h1 style="font-family:var(--display);font-size:26px;font-weight:800;line-height:1.15;margin-bottom:8px;">${pageHeadlineHTML}</h1>
         <div style="font-size:12.5px;color:var(--txt2);max-width:520px;margin:0 auto 12px;">${isLive ? `Clear any row, column, or diagonal of artist trivia to win ${f.ticket_prize_label}. One shot per artist — hard on purpose.` : `The lineup's locked in — here's the board. It unlocks for play once FestiQ goes live for this festival.`}</div>
         ${eventCd ? `<div style="display:flex;justify-content:center;">${countdownHTML(f.event_date)}</div>` : ''}
       </div>
