@@ -168,9 +168,17 @@ app.get("/festival/:slug", async (req, res, next) => {
     const { rows: artists } = await pool.query(`SELECT name, genre FROM artists WHERE festival_id = $1 ORDER BY position ASC`, [f.id]);
 
     const base = `${req.protocol}://${req.get("host")}`;
-    const title = f.status === "live"
-      ? `${f.name} Trivia Bingo — Win ${f.name} Tickets | FestiQ`
-      : `${f.name} Trivia Bingo — Coming Soon | FestiQ`;
+    // Same "Win X [Year] Tickets Playing Trivia Bingo" title whether the
+    // board is live or still upcoming — someone searching "win coachella
+    // 2027 tickets" is the exact intent we want to rank for, and that
+    // search intent doesn't change just because the board hasn't opened
+    // for play yet. year comes from event_date, which is free text
+    // ("2026-10-17", "Oct. 2–4 & Oct. 9–11, 2026", "2027 TBD", "Varies /
+    // next event dependent on city") — pull the first 4-digit year out of
+    // it, or omit the year entirely rather than guess one.
+    const yearMatch = String(f.event_date || "").match(/\b(20\d{2})\b/);
+    const titleYear = yearMatch ? ` ${yearMatch[1]}` : "";
+    const title = `Win ${f.name}${titleYear} Tickets Playing Trivia Bingo | FestiQ`;
     const lineupNames = artists.map((a) => a.name).join(", ");
     const description = f.status === "live"
       ? `Play free ${f.name} trivia bingo${f.location ? " in " + f.location : ""}. Clear a row of artist quizzes — ${lineupNames ? "featuring " + lineupNames.slice(0, 180) + (lineupNames.length > 180 ? "…" : "") : "full lineup on the board"} — and win ${f.ticket_prize_label || "a ticket"} to ${f.name}.`

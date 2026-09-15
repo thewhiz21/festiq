@@ -1007,7 +1007,13 @@ function renderFestival(slug){
     currentFestival = f;
 
     const isLive = f.status === 'live';
-    document.title = `${f.name} Trivia Bingo — ${isLive ? 'Win ' + f.name + ' Tickets' : 'Coming Soon'} | FestiQ`;
+    // Same title formula as the server-rendered <title> for this route (see
+    // server.js) — live or not, whoever lands here searched with "win
+    // tickets" intent, and the tab title shouldn't flip to something
+    // different once the SPA takes over from the initial server render.
+    const titleYearMatch = String(f.event_date || '').match(/\b(20\d{2})\b/);
+    const titleYear = titleYearMatch ? ' ' + titleYearMatch[1] : '';
+    document.title = `Win ${f.name}${titleYear} Tickets Playing Trivia Bingo | FestiQ`;
     const eventCd = daysHoursUntil(f.event_date);
 
     // A festival with no lineup entered yet still gets the real room — full
