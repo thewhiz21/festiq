@@ -126,6 +126,7 @@ app.get("/sitemap.xml", async (req, res) => {
     const { rows: festivals } = await pool.query(`SELECT slug, status FROM festivals ORDER BY event_date ASC`);
     const urls = [
       `<url><loc>${base}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>`,
+      `<url><loc>${base}/festivals</loc><changefreq>daily</changefreq><priority>0.9</priority></url>`,
       `<url><loc>${base}/pricing</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>`,
       `<url><loc>${base}/faq</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>`,
     ];
@@ -221,6 +222,71 @@ app.get("/festival/:slug", async (req, res, next) => {
     res.send(html);
   } catch (err) {
     next();
+  }
+});
+
+// ─── SEO: real links on the homepage + a dedicated /festivals directory ─────
+// Before this, "/" was served as a raw static file (see express.static
+// below) — a real crawler that doesn't execute JS (most don't; even
+// Googlebot's rendering pass is deferred) saw an empty shell with zero
+// <a href> links to any festival, because the grid is built client-side
+// from a fetch() call. It only ever reached individual festival pages via
+// sitemap.xml, never by "crawling" the site the normal way link-to-link.
+// This renders a real, static <noscript> list of every festival with a
+// working link — same technique already used on /festival/:slug — into
+// both "/" and a new dedicated "/festivals" URL, so there's an actual page
+// a bot can land on and follow links from, not just a homepage that jumps
+// straight to whichever festival happens to be in the sitemap.
+function festivalListNoscriptHTML(festivals) {
+  const items = festivals
+    .map((f) => {
+      const meta = [f.location, f.event_date].filter(Boolean).join(" · ");
+      return `<li><a href="/festival/${f.slug}">${escapeHtml(f.name)}</a>${meta ? " — " + escapeHtml(meta) : ""}${f.status === "live" ? " (live now)" : ""}</li>`;
+    })
+    .join("");
+  return `<noscript><h1>All Festivals</h1><ul>${items}</ul><p><a href="/pricing">Pricing</a> · <a href="/faq">FAQ</a></p></noscript>`;
+}
+
+app.get("/", async (req, res) => {
+  try {
+    const base = `${req.protocol}://${req.get("host")}`;
+    const { rows: festivals } = await pool.query(`SELECT slug, name, location, event_date, status FROM festivals ORDER BY event_date ASC`);
+    const fs = require("fs");
+    let html = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8");
+    html = html.replace(
+      "</head>",
+      `<link rel="canonical" href="${base}/">\n<meta property="og:url" content="${base}/">\n</head>`
+    );
+    html = html.replace("</body>", `${festivalListNoscriptHTML(festivals)}</body>`);
+    res.send(html);
+  } catch (err) {
+    res.sendFile(path.join(__dirname, "..", "public", "index.html"));
+  }
+});
+
+app.get("/festivals", async (req, res) => {
+  try {
+    const base = `${req.protocol}://${req.get("host")}`;
+    const canonical = `${base}/festivals`;
+    const title = "All Festivals — Play Trivia Bingo for Real Tickets | FestiQ";
+    const description = "Browse every festival on FestiQ — ACL, Coachella, EDC, Camp Flog Gnaw, and dozens more. Pick a festival, pick an artist, answer their trivia, and win real tickets.";
+    const { rows: festivals } = await pool.query(`SELECT slug, name, location, event_date, status FROM festivals ORDER BY event_date ASC`);
+    const fs = require("fs");
+    let html = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8");
+    html = html
+      .replace(/<title>.*?<\/title>/, `<title>${escapeHtml(title)}</title>`)
+      .replace(/<meta property="og:title"[^>]*>/, `<meta property="og:title" content="${escapeHtml(title)}">`)
+      .replace(/<meta property="og:description"[^>]*>/, `<meta property="og:description" content="${escapeHtml(description)}">`)
+      .replace(/<meta name="twitter:title"[^>]*>/, `<meta name="twitter:title" content="${escapeHtml(title)}">`)
+      .replace(/<meta name="twitter:description"[^>]*>/, `<meta name="twitter:description" content="${escapeHtml(description)}">`)
+      .replace("</head>", `<meta name="description" content="${escapeHtml(description)}">
+<link rel="canonical" href="${canonical}">
+<meta property="og:url" content="${canonical}">
+</head>`);
+    html = html.replace("</body>", `${festivalListNoscriptHTML(festivals)}</body>`);
+    res.send(html);
+  } catch (err) {
+    res.status(500).send("Server error");
   }
 });
 

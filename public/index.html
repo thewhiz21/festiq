@@ -584,7 +584,7 @@ function spotlightHTML(list){
     <a href="/festival/${f.slug}" onclick="return handleFestivalLinkClick(event,'/festival/${f.slug}')" class="spotlight" style="--spot-bg:linear-gradient(120deg, ${f.banner_color || '#ff3d81'}, #a230ea);">
       <div class="spot-eyebrow">⚡ ${f.status === 'live' ? "PLAYING NOW" : "UP NEXT"}</div>
       <div class="spot-name">${f.name}</div>
-      <div class="spot-meta">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''} ${f.status === 'live' ? `· 🎁 ${f.ticket_prize_label || 'Ticket prize'}` : '· Lineup drops soon'}</div>
+      <div class="spot-meta">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''} ${f.status === 'live' ? `· 🎁 ${f.ticket_prize_label || 'Ticket prize'}` : (f.lineup_count ? `· ${f.lineup_count} artists locked in` : '· Lineup drops soon')}</div>
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
         ${cd}
         <span class="spot-cta">${f.status === 'live' ? 'PLAY THE BOARD →' : 'GET NOTIFIED →'}</span>
@@ -731,7 +731,9 @@ function renderList(){
           ${isLive
             ? `<div class="meta">${f.lineup_count} artists on the board · 🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'}/try</div>
                <div class="meta" style="display:inline-flex;align-items:center;gap:5px;color:var(--gold);font-weight:800;background:rgba(255,157,0,0.1);padding:4px 9px;border-radius:20px;">🎁 ${f.ticket_prize_label} · up to ${f.tickets_available} ticket${f.tickets_available === 1 ? '' : 's'}</div>`
-            : `<div class="meta">Lineup drops soon</div>`}
+            : (f.lineup_count
+                ? `<div class="meta">${f.lineup_count} artists locked in · board opens soon</div>`
+                : `<div class="meta">Lineup drops soon</div>`)}
         </div>
       </a>
     `;
