@@ -37,15 +37,26 @@
   #login{min-height:100vh;display:flex;align-items:center;justify-content:center;}
   #login .box{background:var(--bg1);border:1px solid var(--border2);border-radius:10px;padding:32px;width:100%;max-width:340px;}
   #login h1{font-family:var(--display);font-size:22px;margin-bottom:4px;}
+  #login h1 .brand{
+    background:linear-gradient(100deg,#ff3d81 0%,#ff9d00 18%,#ffe066 36%,#00e5a0 54%,#2f9bff 72%,#a230ea 88%,#ff3d81 100%);
+    background-size:300% auto;-webkit-background-clip:text;background-clip:text;color:transparent;
+    animation:holo 6s linear infinite;filter:drop-shadow(0 0 10px rgba(255,61,129,0.35));}
   #login p{color:var(--txt2);font-size:11px;margin-bottom:18px;}
   #login input{margin-bottom:12px;}
   #login .err{color:var(--red);font-size:11px;margin-top:8px;min-height:14px;}
 
   #app{display:none;}
   header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:10;}
-  header .logo{font-family:var(--display);font-size:19px;font-weight:800;}
-  header .logo span{color:var(--pink);}
-  header .logo small{font-family:var(--mono);font-size:10px;color:var(--txt2);font-weight:400;margin-left:8px;letter-spacing:.05em;}
+  /* Same rainbow-glow wordmark as the public site's .logo (public/index.html)
+     — same gradient stops, same animated sweep, so the admin panel reads as
+     the same product instead of a plain-text back office. */
+  header .logo,header .logo span{
+    background:linear-gradient(100deg,#ff3d81 0%,#ff9d00 18%,#ffe066 36%,#00e5a0 54%,#2f9bff 72%,#a230ea 88%,#ff3d81 100%);
+    background-size:300% auto;-webkit-background-clip:text;background-clip:text;color:transparent;
+    animation:holo 6s linear infinite;}
+  header .logo{font-family:var(--display);font-size:19px;font-weight:800;filter:drop-shadow(0 0 10px rgba(255,61,129,0.35));}
+  @keyframes holo{0%{background-position:0% 50%;}100%{background-position:300% 50%;}}
+  header .logo small{font-family:var(--mono);font-size:10px;color:var(--txt2);font-weight:400;margin-left:8px;letter-spacing:.05em;-webkit-background-clip:initial;background-clip:initial;background:none;animation:none;filter:none;}
   nav{display:flex;gap:4px;padding:12px 24px;border-bottom:1px solid var(--border);overflow-x:auto;}
   nav button{white-space:nowrap;}
   nav button.active{border-color:var(--pink);color:var(--pink);background:rgba(255,61,129,0.08);}
@@ -103,7 +114,7 @@
 
 <div id="login">
   <div class="box">
-    <h1>FestiQ <span style="color:var(--pink)">Admin</span></h1>
+    <h1><span class="brand">FestiQ</span> Admin</h1>
     <p>Enter the admin secret to continue.</p>
     <input type="password" id="secretInput" placeholder="Admin secret" onkeydown="if(event.key==='Enter')login()" />
     <button class="btn-blue" style="width:100%" onclick="login()">Sign in</button>
