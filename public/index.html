@@ -1109,7 +1109,7 @@ function renderFestival(slug){
 
       <div class="section-label">Full Lineup</div>
       <div class="lineup-poster">
-        ${[...cells].sort((a,b) => a.position - b.position).map(c => `<span class="lineup-chip ${c.status === 'cleared' ? 'is-cleared' : c.status === 'dead' ? 'is-dead' : ''}">${c.status === 'cleared' ? '✅ ' : c.status === 'dead' ? '💀 ' : '🎤 '}${c.name}${c.genre ? ` <span class="lc-genre">· ${c.genre}</span>` : ''}</span>`).join('')}
+        ${[...cells].sort((a,b) => a.position - b.position).map(c => `<span class="lineup-chip ${c.status === 'cleared' ? 'is-cleared' : c.status === 'dead' ? 'is-dead' : ''}" ${c.also_at && c.also_at.length ? `title="Also playing: ${c.also_at.map(x=>x.name).join(', ')}"` : ''}>${c.status === 'cleared' ? '✅ ' : c.status === 'dead' ? '💀 ' : '🎤 '}${c.name}${c.genre ? ` <span class="lc-genre">· ${c.genre}</span>` : ''}${c.also_at && c.also_at.length ? ` <span class="lc-genre">🔁 also at ${c.also_at.length > 1 ? c.also_at.length + ' fests' : c.also_at[0].name}</span>` : ''}</span>`).join('')}
       </div>
 
       ${tokenPricingPreviewHTML()}

@@ -82,6 +82,21 @@ async function initSchema() {
     -- what the actual show costs to get into.
     ALTER TABLE festivals ADD COLUMN IF NOT EXISTS avg_ga_price_usd_cents INTEGER;
 
+    -- Canonical cross-festival artist registry. Multiple festivals' "artists"
+    -- rows (one lineup slot each) can point at the same global_artists row
+    -- when it's literally the same act, so the API can answer "where else is
+    -- this artist playing" instead of every festival's lineup being an
+    -- island. Seeded by seed-utils.js's upsertGlobalArtist for every artist
+    -- added through it; older festivals seeded before this existed just have
+    -- artists.global_artist_id = NULL, which is fine (no also-playing data
+    -- for those rows, nothing else breaks).
+    CREATE TABLE IF NOT EXISTS global_artists (
+      id SERIAL PRIMARY KEY,
+      canonical_name TEXT UNIQUE NOT NULL,
+      genre TEXT
+    );
+    ALTER TABLE artists ADD COLUMN IF NOT EXISTS global_artist_id INTEGER REFERENCES global_artists(id);
+
     CREATE TABLE IF NOT EXISTS board_cells (
       board_id INTEGER NOT NULL REFERENCES boards(id),
       artist_id INTEGER NOT NULL REFERENCES artists(id),

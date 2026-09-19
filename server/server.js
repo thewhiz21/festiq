@@ -358,6 +358,7 @@ function boardPayload(festival, artists, cells, gridSize, wonTicket, linesComple
       set_time: a.set_time,
       difficulty: a.difficulty,
       position: a.position,
+      also_at: a.also_at || [],
       status: cellByArtist[a.id] || "available",
     })),
   };
@@ -436,6 +437,22 @@ app.get("/api/festivals/:slug", async (req, res) => {
     const { rows: artists } = await pool.query(`SELECT * FROM artists WHERE festival_id = $1 ORDER BY position ASC`, [festival.id]);
     const gridSize = gridSizeForArtistCount(artists.length);
 
+    // Cross-festival "also playing at" — see global_artists in db.js. Only
+    // artists seeded through seed-utils.js have a global_artist_id, so this
+    // is empty (harmless) for older festivals seeded before it existed.
+    const globalIds = [...new Set(artists.map((a) => a.global_artist_id).filter(Boolean))];
+    if (globalIds.length) {
+      const { rows: alsoRows } = await pool.query(
+        `SELECT a.global_artist_id AS gid, f.slug, f.name FROM artists a JOIN festivals f ON f.id = a.festival_id WHERE a.global_artist_id = ANY($1) AND f.id != $2`,
+        [globalIds, festival.id]
+      );
+      const alsoAtByGid = {};
+      for (const r of alsoRows) (alsoAtByGid[r.gid] ||= []).push({ slug: r.slug, name: r.name });
+      for (const a of artists) a.also_at = a.global_artist_id ? alsoAtByGid[a.global_artist_id] || [] : [];
+    } else {
+      for (const a of artists) a.also_at = [];
+    }
+
     let board = null;
     const header = req.headers.authorization;
     if (festival.status === "live" && header && header.startsWith("Bearer ")) {
@@ -461,7 +478,7 @@ app.get("/api/festivals/:slug", async (req, res) => {
       entry_cost_tokens: festival.entry_cost_tokens,
       avg_ga_price_usd_cents: festival.avg_ga_price_usd_cents || null,
       grid_size: gridSize,
-      artists: artists.map((a) => ({ id: a.id, name: a.name, genre: a.genre, set_time: a.set_time, position: a.position, difficulty: a.difficulty })),
+      artists: artists.map((a) => ({ id: a.id, name: a.name, genre: a.genre, set_time: a.set_time, position: a.position, difficulty: a.difficulty, also_at: a.also_at })),
       board,
     });
   } catch (err) {
