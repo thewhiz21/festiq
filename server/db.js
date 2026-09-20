@@ -125,11 +125,43 @@ async function initSchema() {
     );
 
     -- Admin-editable runtime settings (site lock / preview key overrides,
-    -- etc.) so the admin panel can flip these without a redeploy. Falls
-    -- back to the env vars of the same name when a row isn't set.
+    -- homepage spotlight override, etc.) so the admin panel can flip these
+    -- without a redeploy. Falls back to the env vars of the same name (or
+    -- to auto-computed behavior) when a row isn't set.
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT
+    );
+
+    -- Sitewide token bundles shown on the Trivia Tokens page and in the
+    -- buy-tokens modal. Used to be a hardcoded array in the frontend, which
+    -- meant changing a price meant shipping new code — now it's plain data
+    -- the admin panel edits directly. color_key picks one of the site's
+    -- existing accent colors (blue/purple/gold/pink) rather than storing
+    -- raw CSS, so a pack always matches the site's palette.
+    CREATE TABLE IF NOT EXISTS token_packs (
+      id SERIAL PRIMARY KEY,
+      tokens INTEGER NOT NULL,
+      price_usd_cents INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      color_key TEXT NOT NULL DEFAULT 'blue',
+      badge TEXT,
+      bonus_pct INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      active BOOLEAN NOT NULL DEFAULT TRUE
+    );
+
+    -- Log of every token purchase (real once a payment processor is wired
+    -- up; for now these come from the demo-buy flow, but the shape is the
+    -- real one so revenue analytics don't need to change later). pack_id is
+    -- nullable so a legacy/arbitrary quantity purchase doesn't break.
+    CREATE TABLE IF NOT EXISTS token_purchases (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      pack_id INTEGER REFERENCES token_packs(id),
+      tokens INTEGER NOT NULL,
+      price_usd_cents INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
 }

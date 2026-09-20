@@ -38,6 +38,17 @@ const UPCOMING_FESTIVALS = [
   { slug: "cma-fest", name: "CMA Fest", location: "Nashville, TN", event_date: "June 10–13, 2027", banner_color: "#4da6ff" },
 ];
 
+// Default token packs — these used to be a hardcoded array in the frontend;
+// seeding them once here (only if the table is empty) is what lets the
+// admin panel take over editing prices/bonuses from here on without ever
+// clobbering admin edits on a redeploy.
+const DEFAULT_TOKEN_PACKS = [
+  { tokens: 10, price_usd_cents: 500, label: "Starter Stack", color_key: "blue", bonus_pct: 0, sort_order: 1 },
+  { tokens: 30, price_usd_cents: 1200, label: "Party Pack", color_key: "purple", badge: "Most Popular", bonus_pct: 0, sort_order: 2 },
+  { tokens: 75, price_usd_cents: 2500, label: "Mega Pack", color_key: "gold", badge: "Best Value", bonus_pct: 15, sort_order: 3 },
+  { tokens: 150, price_usd_cents: 4500, label: "Arcade Vault", color_key: "pink", bonus_pct: 25, sort_order: 4 },
+];
+
 async function seed() {
   // Idempotent upgrade for boards already seeded before the 2-ticket tier
   // model existed — bump the ticket supply so a 2nd line is actually
@@ -45,6 +56,17 @@ async function seed() {
   await pool.query(
     `UPDATE festivals SET tickets_available = 2 WHERE slug = 'sunset-waves-2026' AND tickets_available < 2`
   );
+
+  const { rows: packRows } = await pool.query(`SELECT COUNT(*)::int AS n FROM token_packs`);
+  if (packRows[0].n === 0) {
+    for (const p of DEFAULT_TOKEN_PACKS) {
+      await pool.query(
+        `INSERT INTO token_packs (tokens, price_usd_cents, label, color_key, badge, bonus_pct, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [p.tokens, p.price_usd_cents, p.label, p.color_key, p.badge || null, p.bonus_pct, p.sort_order]
+      );
+    }
+    console.log(`Seeded ${DEFAULT_TOKEN_PACKS.length} default token pack(s).`);
+  }
 
   for (const f of UPCOMING_FESTIVALS) {
     const { rows } = await pool.query(`SELECT id FROM festivals WHERE slug = $1`, [f.slug]);

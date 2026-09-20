@@ -27,14 +27,20 @@ const PREVIEW_COOKIE = "festiq_preview";
 const siteSettings = {
   site_locked: process.env.SITE_LOCKED !== "false",
   preview_key: process.env.PREVIEW_KEY || "",
+  // null = auto-pick the soonest live/upcoming festival (original behavior).
+  // Set by the admin panel to pin a specific festival to the homepage hero
+  // spot regardless of date — e.g. to promote a festival you're pushing
+  // marketing spend behind this week.
+  spotlight_festival_id: null,
 };
 
 async function loadSiteSettings() {
   try {
-    const { rows } = await pool.query(`SELECT key, value FROM settings WHERE key IN ('site_locked', 'preview_key')`);
+    const { rows } = await pool.query(`SELECT key, value FROM settings WHERE key IN ('site_locked', 'preview_key', 'spotlight_festival_id')`);
     for (const row of rows) {
       if (row.key === "site_locked") siteSettings.site_locked = row.value === "true";
       if (row.key === "preview_key") siteSettings.preview_key = row.value || "";
+      if (row.key === "spotlight_festival_id") siteSettings.spotlight_festival_id = row.value ? parseInt(row.value, 10) : null;
     }
   } catch (err) {
     console.error("Failed to load site settings, using env var defaults:", err.message);
@@ -48,6 +54,7 @@ async function saveSiteSetting(key, value) {
   );
   if (key === "site_locked") siteSettings.site_locked = value === true || value === "true";
   if (key === "preview_key") siteSettings.preview_key = value || "";
+  if (key === "spotlight_festival_id") siteSettings.spotlight_festival_id = value ? parseInt(value, 10) : null;
 }
 
 function parseCookies(header) {
@@ -486,9 +493,24 @@ app.get("/api/festivals", async (req, res) => {
         entry_cost_tokens: f.entry_cost_tokens,
         avg_ga_price_usd_cents: f.avg_ga_price_usd_cents || null,
         lineup_count: lineupCount,
+        is_spotlight: siteSettings.spotlight_festival_id === f.id,
       });
     }
     res.json(out);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Sitewide token bundles for the Trivia Tokens page / buy-tokens modal.
+// Public + unauthenticated since anyone browsing can see prices before
+// logging in; only active packs, in display order.
+app.get("/api/token-packs", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, tokens, price_usd_cents, label, color_key, badge, bonus_pct FROM token_packs WHERE active = TRUE ORDER BY sort_order ASC, id ASC`
+    );
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -585,13 +607,32 @@ app.post("/api/wallet/claim-free", requireAuth, async (req, res) => {
 // DEMO ONLY — no payment processor wired up yet (ticket sourcing / pricing
 // model isn't finalized). Grants tokens instantly so the game loop can be
 // tested end to end. Swap for a real Stripe Checkout session before launch,
-// same pattern as PropQuix's solo token packs.
+// same pattern as PropQuix's solo token packs. Every "purchase" is still
+// logged to token_purchases (pack, tokens, price) so revenue analytics work
+// today and don't need to change shape once real payments are wired in —
+// only how the tokens get authorized changes, not how they get recorded.
 app.post("/api/wallet/demo-buy-tokens", requireAuth, async (req, res) => {
   try {
-    const quantity = Math.max(1, Math.min(500, parseInt(req.body?.quantity) || 1));
-    await pool.query(`UPDATE wallets SET tokens = tokens + $1 WHERE user_id = $2`, [quantity, req.user.id]);
+    let tokensToAdd, packId = null, priceCents = null;
+    if (req.body?.pack_id) {
+      const { rows: packRows } = await pool.query(`SELECT * FROM token_packs WHERE id = $1 AND active = TRUE`, [req.body.pack_id]);
+      const pack = packRows[0];
+      if (!pack) return res.status(404).json({ error: "That token pack is no longer available" });
+      tokensToAdd = pack.tokens + Math.round((pack.tokens * (pack.bonus_pct || 0)) / 100);
+      packId = pack.id;
+      priceCents = pack.price_usd_cents;
+    } else {
+      // Back-compat: an arbitrary quantity with no pack behind it (e.g. an
+      // older client build) — still granted, just not tied to a priced pack.
+      tokensToAdd = Math.max(1, Math.min(500, parseInt(req.body?.quantity) || 1));
+    }
+    await pool.query(`UPDATE wallets SET tokens = tokens + $1 WHERE user_id = $2`, [tokensToAdd, req.user.id]);
+    await pool.query(
+      `INSERT INTO token_purchases (user_id, pack_id, tokens, price_usd_cents) VALUES ($1, $2, $3, $4)`,
+      [req.user.id, packId, tokensToAdd, priceCents]
+    );
     const updated = await getOrCreateWallet(req.user.id);
-    res.json({ tokens: updated.tokens, demo: true });
+    res.json({ tokens: updated.tokens, tokens_added: tokensToAdd, demo: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -858,14 +899,28 @@ app.post("/api/admin/reset-board", requireAdmin, async (req, res) => {
 // ── Settings (site lock / preview key, editable without a redeploy) ────────
 
 app.get("/api/admin/settings", requireAdmin, (req, res) => {
-  res.json({ site_locked: siteSettings.site_locked, preview_key: siteSettings.preview_key });
+  res.json({
+    site_locked: siteSettings.site_locked,
+    preview_key: siteSettings.preview_key,
+    spotlight_festival_id: siteSettings.spotlight_festival_id,
+  });
 });
 
 app.post("/api/admin/settings", requireAdmin, async (req, res) => {
   try {
     if (typeof req.body.site_locked === "boolean") await saveSiteSetting("site_locked", req.body.site_locked);
     if (typeof req.body.preview_key === "string") await saveSiteSetting("preview_key", req.body.preview_key);
-    res.json({ site_locked: siteSettings.site_locked, preview_key: siteSettings.preview_key });
+    // spotlight_festival_id: a number pins that festival; null/empty clears
+    // it back to auto (soonest live/upcoming), same as before this existed.
+    if ("spotlight_festival_id" in req.body) {
+      const val = req.body.spotlight_festival_id;
+      await saveSiteSetting("spotlight_festival_id", val === null || val === "" ? "" : String(parseInt(val, 10)));
+    }
+    res.json({
+      site_locked: siteSettings.site_locked,
+      preview_key: siteSettings.preview_key,
+      spotlight_festival_id: siteSettings.spotlight_festival_id,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1135,6 +1190,7 @@ app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
     await pool.query(`DELETE FROM boards WHERE user_id = $1`, [id]);
     await pool.query(`DELETE FROM pending_attempts WHERE user_id = $1`, [id]);
     await pool.query(`DELETE FROM tickets_won WHERE user_id = $1`, [id]);
+    await pool.query(`DELETE FROM token_purchases WHERE user_id = $1`, [id]);
     await pool.query(`DELETE FROM wallets WHERE user_id = $1`, [id]);
     const { rowCount } = await pool.query(`DELETE FROM users WHERE id = $1`, [id]);
     if (!rowCount) return res.status(404).json({ error: "User not found" });
@@ -1179,6 +1235,175 @@ app.post("/api/admin/tickets/:id/fulfill", requireAdmin, async (req, res) => {
     const { rows } = await pool.query(`UPDATE tickets_won SET fulfilled = $2 WHERE id = $1 RETURNING *`, [req.params.id, fulfilled]);
     if (!rows.length) return res.status(404).json({ error: "Ticket not found" });
     res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Token packs (sitewide pricing, editable without a redeploy) ───────────
+
+app.get("/api/admin/token-packs", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT * FROM token_packs ORDER BY sort_order ASC, id ASC`);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/token-packs", requireAdmin, async (req, res) => {
+  try {
+    const { tokens, price_usd_cents, label, color_key, badge, bonus_pct, sort_order, active } = req.body;
+    if (!tokens || !price_usd_cents || !label) return res.status(400).json({ error: "tokens, price_usd_cents, and label are required" });
+    const { rows } = await pool.query(
+      `INSERT INTO token_packs (tokens, price_usd_cents, label, color_key, badge, bonus_pct, sort_order, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [tokens, price_usd_cents, label.trim(), color_key || "blue", badge || null, bonus_pct || 0, sort_order ?? 0, active !== false]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/admin/token-packs/:id", requireAdmin, async (req, res) => {
+  try {
+    const fields = ["tokens", "price_usd_cents", "label", "color_key", "badge", "bonus_pct", "sort_order", "active"];
+    const updates = fields.filter((f) => req.body[f] !== undefined);
+    if (!updates.length) return res.status(400).json({ error: "No fields to update" });
+    const setClause = updates.map((f, i) => `${f} = $${i + 2}`).join(", ");
+    const values = updates.map((f) => req.body[f]);
+    const { rows } = await pool.query(`UPDATE token_packs SET ${setClause} WHERE id = $1 RETURNING *`, [req.params.id, ...values]);
+    if (!rows.length) return res.status(404).json({ error: "Pack not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/admin/token-packs/:id", requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(`DELETE FROM token_packs WHERE id = $1`, [req.params.id]);
+    if (!rowCount) return res.status(404).json({ error: "Pack not found" });
+    res.json({ success: true });
+  } catch (err) {
+    // A pack with purchase history hits the token_purchases FK — deactivate
+    // instead of deleting so the revenue history it's attached to stays intact.
+    if (err.code === "23503") return res.status(409).json({ error: "This pack has purchase history — deactivate it instead of deleting." });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Cross-festival artist registry ──────────────────────────────────────
+// See global_artists in db.js — this is the admin view onto the same-artist
+// links seed-utils.js builds automatically. Mostly a read/cleanup surface:
+// fix a genre, rename a canonical entry, or remove one nothing points to.
+
+app.get("/api/admin/global-artists", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT ga.id, ga.canonical_name, ga.genre,
+             COUNT(a.id)::int AS appearances,
+             COALESCE(jsonb_agg(DISTINCT jsonb_build_object('slug', f.slug, 'name', f.name)) FILTER (WHERE f.id IS NOT NULL), '[]'::jsonb) AS festivals
+      FROM global_artists ga
+      LEFT JOIN artists a ON a.global_artist_id = ga.id
+      LEFT JOIN festivals f ON f.id = a.festival_id
+      GROUP BY ga.id
+      ORDER BY appearances DESC, ga.canonical_name ASC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/admin/global-artists/:id", requireAdmin, async (req, res) => {
+  try {
+    const fields = ["canonical_name", "genre"];
+    const updates = fields.filter((f) => req.body[f] !== undefined);
+    if (!updates.length) return res.status(400).json({ error: "No fields to update" });
+    const setClause = updates.map((f, i) => `${f} = $${i + 2}`).join(", ");
+    const values = updates.map((f) => req.body[f]);
+    const { rows } = await pool.query(`UPDATE global_artists SET ${setClause} WHERE id = $1 RETURNING *`, [req.params.id, ...values]);
+    if (!rows.length) return res.status(404).json({ error: "Artist not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ error: "Another artist already uses that canonical name" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/admin/global-artists/:id", requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(`DELETE FROM global_artists WHERE id = $1`, [req.params.id]);
+    if (!rowCount) return res.status(404).json({ error: "Artist not found" });
+    res.json({ success: true });
+  } catch (err) {
+    if (err.code === "23503") return res.status(409).json({ error: "Still linked to lineup slots — unlink them first" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Analytics (revenue + gameplay usage) ────────────────────────────────
+// Revenue is real math over token_purchases (logged by the demo-buy flow
+// today, by a real payment processor later — same table either way).
+// Usage comes straight from board_cells, which already permanently records
+// every cleared/dead square, so none of this needed a new tracking table.
+
+app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
+  try {
+    const [revenueTotals, revenueByPack, usageTotals, usageByFestival, byDifficulty, hardestArtists] = await Promise.all([
+      pool.query(`SELECT COALESCE(SUM(price_usd_cents),0)::int AS total_revenue_usd_cents, COALESCE(SUM(tokens),0)::int AS total_tokens_sold, COUNT(*)::int AS purchases_count FROM token_purchases`),
+      pool.query(`
+        SELECT COALESCE(tp.label, 'Other / legacy') AS label, COUNT(*)::int AS purchases_count,
+               COALESCE(SUM(p.tokens),0)::int AS tokens_sold, COALESCE(SUM(p.price_usd_cents),0)::int AS revenue_usd_cents
+        FROM token_purchases p LEFT JOIN token_packs tp ON tp.id = p.pack_id
+        GROUP BY tp.label ORDER BY revenue_usd_cents DESC
+      `),
+      pool.query(`
+        SELECT (SELECT COUNT(*)::int FROM boards) AS boards_started,
+               (SELECT COUNT(*)::int FROM boards WHERE won_ticket = TRUE) AS boards_won,
+               (SELECT COALESCE(SUM(tickets_awarded),0)::int FROM festivals) AS tickets_awarded,
+               (SELECT COALESCE(SUM(tickets_available),0)::int FROM festivals) AS tickets_available
+      `),
+      pool.query(`
+        SELECT f.name, f.slug, f.status,
+               (SELECT COUNT(*)::int FROM boards b WHERE b.festival_id = f.id) AS boards_started,
+               (SELECT COUNT(*)::int FROM board_cells bc JOIN boards b ON b.id = bc.board_id WHERE b.festival_id = f.id AND bc.status = 'cleared') AS cleared,
+               (SELECT COUNT(*)::int FROM board_cells bc JOIN boards b ON b.id = bc.board_id WHERE b.festival_id = f.id AND bc.status = 'dead') AS dead,
+               f.tickets_awarded, f.tickets_available
+        FROM festivals f
+        ORDER BY boards_started DESC, f.name ASC
+      `),
+      pool.query(`
+        SELECT a.difficulty,
+               COUNT(*) FILTER (WHERE bc.status = 'cleared')::int AS cleared,
+               COUNT(*) FILTER (WHERE bc.status = 'dead')::int AS dead
+        FROM board_cells bc JOIN artists a ON a.id = bc.artist_id
+        WHERE bc.status IN ('cleared', 'dead')
+        GROUP BY a.difficulty
+      `),
+      pool.query(`
+        SELECT * FROM (
+          SELECT a.name, f.name AS festival_name, a.difficulty,
+                 COUNT(*) FILTER (WHERE bc.status = 'cleared')::int AS cleared,
+                 COUNT(*) FILTER (WHERE bc.status = 'dead')::int AS dead
+          FROM board_cells bc
+          JOIN artists a ON a.id = bc.artist_id
+          JOIN festivals f ON f.id = a.festival_id
+          WHERE bc.status IN ('cleared', 'dead')
+          GROUP BY a.id, a.name, f.name, a.difficulty
+        ) sub
+        ORDER BY dead DESC, (dead::float / NULLIF(dead + cleared, 0)) DESC NULLS LAST
+        LIMIT 10
+      `),
+    ]);
+    res.json({
+      revenue: { ...revenueTotals.rows[0], by_pack: revenueByPack.rows },
+      usage: { ...usageTotals.rows[0], by_festival: usageByFestival.rows },
+      difficulty: byDifficulty.rows,
+      hardest_artists: hardestArtists.rows,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

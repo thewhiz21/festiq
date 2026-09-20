@@ -467,10 +467,11 @@ function claimFreeToken(){
     });
 }
 
-function demoBuyTokens(qty){
-  fetch(`${API}/api/wallet/demo-buy-tokens`, { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ quantity: qty }) })
+function demoBuyTokens(packId){
+  fetch(`${API}/api/wallet/demo-buy-tokens`, { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ pack_id: packId }) })
     .then(r => r.json()).then(d => {
-      toast(`+${qty} tokens added (demo — no real charge)`);
+      if (d.error) { toast(d.error); return; }
+      toast(`+${d.tokens_added} tokens added (demo — no real charge)`);
       refreshWallet();
     });
 }
@@ -480,31 +481,59 @@ function demoBuyTokens(qty){
 // at the moment of buying the stack. Once you're holding tokens, every board
 // and every button talks in tokens only, the same way a Chuck E. Cheese
 // register shows a price but the games themselves just eat tokens.
-const TOKEN_PACKS = [
-  { tokens: 10,  price: 5,  color: 'var(--blue)',   tint: 'rgba(47,123,255,0.10)',  label: 'Starter Stack' },
-  { tokens: 30,  price: 12, color: 'var(--purple)',  tint: 'rgba(162,48,234,0.10)', label: 'Party Pack', badge: 'Most Popular' },
-  { tokens: 75,  price: 25, color: 'var(--gold)',    tint: 'rgba(255,157,0,0.10)',  label: 'Mega Pack', badge: 'Best Value', bonusPct: 15 },
-  { tokens: 150, price: 45, color: 'var(--pink)',    tint: 'rgba(255,61,129,0.10)', label: 'Arcade Vault', bonusPct: 25 },
-];
-
-function openTokenShop(){
-  if (!user) { openAuthModal(); return; }
-  const grid = document.getElementById('pack-grid');
-  grid.innerHTML = TOKEN_PACKS.map(p => `
-    <div class="pack-card" style="--pk-accent:${p.color};--pk-tint:${p.tint};" onclick="buyPack(${p.tokens})">
+//
+// Pack pricing lives in the database now (admin-editable, see /api/token-packs)
+// instead of being hardcoded here — this just maps each pack's color_key to
+// the site's existing accent variables so a DB row never needs raw CSS.
+const PACK_COLOR_MAP = {
+  blue:   { color: 'var(--blue)',   tint: 'rgba(47,123,255,0.10)' },
+  purple: { color: 'var(--purple)', tint: 'rgba(162,48,234,0.10)' },
+  gold:   { color: 'var(--gold)',   tint: 'rgba(255,157,0,0.10)' },
+  pink:   { color: 'var(--pink)',   tint: 'rgba(255,61,129,0.10)' },
+};
+let TOKEN_PACKS = [];
+let tokenPacksPromise = null;
+function ensureTokenPacks(){
+  if (!tokenPacksPromise) {
+    tokenPacksPromise = fetch(`${API}/api/token-packs`).then(r => r.json()).then(list => {
+      TOKEN_PACKS = list.map(p => ({
+        id: p.id, tokens: p.tokens, price: p.price_usd_cents / 100, label: p.label,
+        badge: p.badge, bonusPct: p.bonus_pct || 0,
+        ...(PACK_COLOR_MAP[p.color_key] || PACK_COLOR_MAP.blue),
+      }));
+      return TOKEN_PACKS;
+    }).catch(() => { tokenPacksPromise = null; return []; });
+  }
+  return tokenPacksPromise;
+}
+function packCardsHTML(packs, buyable){
+  if (!packs.length) return '<div class="empty">No token packs available right now.</div>';
+  return packs.map(p => `
+    <div class="pack-card" style="--pk-accent:${p.color};--pk-tint:${p.tint};" onclick="${buyable ? `buyPack(${p.id})` : 'openTokenShop()'}">
       ${p.badge ? `<div class="pk-badge">${p.badge}</div>` : ''}
       <div class="pk-tokens">🎟️ ${p.tokens}</div>
       <div class="pk-label">${p.label}</div>
-      <div class="pk-price">$${p.price}</div>
+      <div class="pk-price">$${p.price % 1 === 0 ? p.price : p.price.toFixed(2)}</div>
       ${p.bonusPct ? `<div class="pk-bonus">+${p.bonusPct}% bonus tokens</div>` : ''}
     </div>
   `).join('');
-  document.getElementById('shop-modal').classList.add('open');
+}
+function fillTokenPackGrid(elId, buyable){
+  const el = document.getElementById(elId);
+  if (!el) return;
+  ensureTokenPacks().then(packs => { const el2 = document.getElementById(elId); if (el2) el2.innerHTML = packCardsHTML(packs, buyable); });
 }
 
-function buyPack(qty){
+function openTokenShop(){
+  if (!user) { openAuthModal(); return; }
+  document.getElementById('pack-grid').innerHTML = TOKEN_PACKS.length ? packCardsHTML(TOKEN_PACKS, true) : '<div class="empty">Loading…</div>';
+  document.getElementById('shop-modal').classList.add('open');
+  fillTokenPackGrid('pack-grid', true);
+}
+
+function buyPack(id){
   closeModal('shop-modal');
-  demoBuyTokens(qty);
+  demoBuyTokens(id);
 }
 
 function openAuthModal(){ document.getElementById('auth-modal').classList.add('open'); }
@@ -618,12 +647,14 @@ function trustStripHTML(){
   `;
 }
 
-// The soonest festival worth featuring big — prefers a live one, falls back
-// to the nearest upcoming date. Gives the lobby an actual focal point
-// instead of a flat grid of identical cards.
+// The festival worth featuring big at the top of the homepage. An admin can
+// pin a specific one (is_spotlight, set from Settings → Homepage Spotlight)
+// to promote it regardless of date; otherwise this falls back to the
+// original auto-pick — soonest live, else soonest upcoming.
 function spotlightHTML(list){
+  const pinned = list.find(x => x.is_spotlight);
   const candidates = [...list].sort((a, b) => parseFestivalDate(a.event_date) - parseFestivalDate(b.event_date));
-  const f = candidates.find(x => x.status === 'live') || candidates.find(x => isFinite(parseFestivalDate(x.event_date)));
+  const f = pinned || candidates.find(x => x.status === 'live') || candidates.find(x => isFinite(parseFestivalDate(x.event_date)));
   if (!f) return '';
   const cd = countdownHTML(f.event_date);
   return `
@@ -936,7 +967,7 @@ function renderPricing(){
     <div class="poster-panel">
       <div class="section-label" style="margin-bottom:4px;">The Token Shop</div>
       <div style="font-size:11px;color:var(--txt2);margin-bottom:4px;">Bigger stacks stretch further — the more you grab at once, the more bonus tokens ride along for free.</div>
-      <div class="pack-grid" id="pricing-pack-grid"></div>
+      <div class="pack-grid" id="pricing-pack-grid"><div class="empty">Loading…</div></div>
       <div style="text-align:center;margin-top:16px;">
         <button class="btn btn-purple" onclick="openTokenShop()">🎟️ GRAB TOKENS</button>
       </div>
@@ -968,15 +999,7 @@ function renderPricing(){
 
     <div class="footer-note">FestiQ — a prototype. Real ticket sourcing &amp; payments not wired up yet.</div>
   `;
-  document.getElementById('pricing-pack-grid').innerHTML = TOKEN_PACKS.map(p => `
-    <div class="pack-card" style="--pk-accent:${p.color};--pk-tint:${p.tint};" onclick="openTokenShop()">
-      ${p.badge ? `<div class="pk-badge">${p.badge}</div>` : ''}
-      <div class="pk-tokens">🎟️ ${p.tokens}</div>
-      <div class="pk-label">${p.label}</div>
-      <div class="pk-price">$${p.price}</div>
-      ${p.bonusPct ? `<div class="pk-bonus">+${p.bonusPct}% bonus tokens</div>` : ''}
-    </div>
-  `).join('');
+  fillTokenPackGrid('pricing-pack-grid', false);
   fetch(`${API}/api/festivals`).then(r => r.json()).then(list => {
     const grid = document.getElementById('pricing-grid');
     if (!list.length) { grid.innerHTML = '<div class="empty">No festivals yet.</div>'; return; }
@@ -1158,17 +1181,7 @@ function tokenPricingPreviewHTML(){
         <div style="font-size:10px;color:var(--gold);letter-spacing:0.12em;font-weight:700;text-transform:uppercase;margin-bottom:6px;">🪙 Token Center</div>
         <div style="font-size:12px;color:var(--txt2);max-width:520px;margin:0 auto;">Buy a stack of tokens once — spend them on this board, or any festival's board, whenever you want. Your balance carries over.</div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;">
-        ${TOKEN_PACKS.map(p => `
-          <div class="pack-card" style="--pk-accent:${p.color};--pk-tint:${p.tint};" onclick="openTokenShop()">
-            ${p.badge ? `<div class="pk-badge">${p.badge}</div>` : ''}
-            <div class="pk-tokens">🎟️ ${p.tokens}</div>
-            <div class="pk-label">${p.label}</div>
-            <div class="pk-price">$${p.price}</div>
-            ${p.bonusPct ? `<div class="pk-bonus">+${p.bonusPct}% bonus tokens</div>` : ''}
-          </div>
-        `).join('')}
-      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;" id="festival-token-preview-grid"><div class="empty">Loading…</div></div>
       <div style="text-align:center;margin-top:14px;">
         <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')" class="btn" style="text-decoration:none;display:inline-block;">VIEW TOKEN CENTER →</a>
       </div>
@@ -1308,6 +1321,7 @@ function renderFestival(slug){
 
     renderBoardGrid(cells, f.grid_size, !isLive);
     runDemo();
+    fillTokenPackGrid('festival-token-preview-grid', false);
   });
 }
 

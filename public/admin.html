@@ -133,6 +133,9 @@
     <button data-tab="lineup" onclick="switchTab('lineup')">Lineup &amp; Trivia</button>
     <button data-tab="users" onclick="switchTab('users')">Users</button>
     <button data-tab="tickets" onclick="switchTab('tickets')">Tickets</button>
+    <button data-tab="token-packs" onclick="switchTab('token-packs')">Token Packs</button>
+    <button data-tab="analytics" onclick="switchTab('analytics')">Analytics</button>
+    <button data-tab="global-artists" onclick="switchTab('global-artists')">Artist DB</button>
     <button data-tab="settings" onclick="switchTab('settings')">Settings</button>
   </nav>
 
@@ -215,8 +218,90 @@
       </div>
     </div>
 
+    <!-- TOKEN PACKS -->
+    <div class="tab" id="tab-token-packs">
+      <div class="card">
+        <h2>Token packs <button class="btn-blue btn-sm" onclick="openPackModal()">+ New pack</button></h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Order</th><th>Tokens</th><th>Label</th><th>Price</th><th>Bonus</th><th>Badge</th><th>Color</th><th>Active</th><th>Actions</th></tr></thead>
+            <tbody id="packsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANALYTICS -->
+    <div class="tab" id="tab-analytics">
+      <div class="card">
+        <h2>Revenue</h2>
+        <div class="stat-row" id="revenueStats"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Pack</th><th>Purchases</th><th>Tokens sold</th><th>Revenue</th></tr></thead>
+            <tbody id="revenueByPackBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Usage</h2>
+        <div class="stat-row" id="usageStats"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Festival</th><th>Boards started</th><th>Cleared</th><th>Dead</th><th>Pass rate</th><th>Tickets</th></tr></thead>
+            <tbody id="usageByFestivalBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Pass rate by difficulty</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Difficulty</th><th>Cleared</th><th>Dead</th><th>Pass rate</th></tr></thead>
+            <tbody id="difficultyBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Hardest artists <small>most attempts failed</small></h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Artist</th><th>Cleared</th><th>Dead</th><th>Fail rate</th></tr></thead>
+            <tbody id="hardestArtistsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- GLOBAL ARTISTS -->
+    <div class="tab" id="tab-global-artists">
+      <div class="card">
+        <h2>Cross-festival artist database</h2>
+        <input id="artistSearchInput" placeholder="Search by name…" style="margin-bottom:12px" oninput="renderGlobalArtists()" />
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Canonical name</th><th>Genre</th><th>Appears at</th><th>Appearances</th><th>Actions</th></tr></thead>
+            <tbody id="globalArtistsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div class="tab" id="tab-settings">
+      <div class="card">
+        <h2>Homepage spotlight</h2>
+        <div class="settings-row">
+          <div style="flex:1">
+            <div>Pinned festival</div>
+            <div class="desc">Override which festival shows in the homepage hero. "Auto" picks the soonest live/upcoming show.</div>
+            <div style="margin-top:8px;display:flex;gap:8px;">
+              <select id="spotlightSelect" style="flex:1"></select>
+              <button class="btn-blue btn-sm" onclick="saveSpotlight()">Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="card">
         <h2>Pre-launch gate</h2>
         <div class="settings-row">
@@ -295,6 +380,9 @@ function switchTab(name){
   if(name==='lineup') loadLineupFestivalOptions();
   if(name==='users') loadUsers();
   if(name==='tickets') loadTickets();
+  if(name==='token-packs') loadPacks();
+  if(name==='analytics') loadAnalytics();
+  if(name==='global-artists') loadGlobalArtists();
   if(name==='settings') loadSettings();
 }
 
@@ -661,12 +749,206 @@ function toggleFulfilled(id, current){
     .then(()=>{ toast('Updated'); loadTickets(); }).catch(e=>toast(e.message, true));
 }
 
+// ── Token Packs ──
+const PACK_COLORS = ['blue','purple','gold','pink'];
+function loadPacks(){
+  api('/api/admin/token-packs').then(list=>{
+    document.getElementById('packsBody').innerHTML = list.length ? list.map(p=>`
+      <tr>
+        <td>${p.sort_order}</td>
+        <td>${p.tokens}</td>
+        <td>${esc(p.label)}</td>
+        <td>$${(p.price_usd_cents/100).toFixed(2)}</td>
+        <td>${p.bonus_pct ? '+'+p.bonus_pct+'%' : '—'}</td>
+        <td>${esc(p.badge||'—')}</td>
+        <td>${esc(p.color_key)}</td>
+        <td><span class="pill ${p.active?'pill-yes':'pill-no'}">${p.active?'Yes':'No'}</span></td>
+        <td class="actions">
+          <button class="btn-sm" onclick='openPackModal(${JSON.stringify(p)})'>Edit</button>
+          <button class="btn-sm ${p.active?'':'btn-green'}" onclick="togglePackActive(${p.id}, ${p.active})">${p.active?'Deactivate':'Activate'}</button>
+          <button class="btn-red btn-sm" onclick="deletePack(${p.id}, '${escAttr(p.label)}')">Delete</button>
+        </td>
+      </tr>
+    `).join('') : `<tr><td colspan="9" class="empty">No token packs yet.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
+}
+
+function openPackModal(p){
+  p = p || {};
+  const isEdit = !!p.id;
+  document.getElementById('modalBody').innerHTML = `
+    <h3>${isEdit?'Edit pack':'New pack'}</h3>
+    <div class="form-grid">
+      <label>Tokens</label>
+      <input id="p_tokens" type="number" min="1" value="${p.tokens ?? ''}" />
+      <label>Label</label>
+      <input id="p_label" value="${escAttr(p.label||'')}" />
+      <label>Price ($)</label>
+      <input id="p_price" type="number" min="0" step="0.01" value="${p.price_usd_cents ? (p.price_usd_cents/100).toFixed(2) : ''}" />
+      <label>Bonus %</label>
+      <input id="p_bonus" type="number" min="0" value="${p.bonus_pct ?? 0}" />
+      <label>Badge (optional)</label>
+      <input id="p_badge" value="${escAttr(p.badge||'')}" placeholder="Most Popular" />
+      <label>Color</label>
+      <select id="p_color">
+        ${PACK_COLORS.map(c=>`<option value="${c}" ${p.color_key===c?'selected':''}>${c}</option>`).join('')}
+      </select>
+      <label>Sort order</label>
+      <input id="p_sort" type="number" value="${p.sort_order ?? 0}" />
+      <label>Active</label>
+      <select id="p_active">
+        <option value="true" ${p.active!==false?'selected':''}>Yes</option>
+        <option value="false" ${p.active===false?'selected':''}>No</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="btn-blue" onclick="savePack(${p.id||'null'})">${isEdit?'Save':'Create'}</button>
+    </div>
+  `;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function savePack(id){
+  const body = {
+    tokens: Number(document.getElementById('p_tokens').value),
+    label: document.getElementById('p_label').value.trim(),
+    price_usd_cents: Math.round(Number(document.getElementById('p_price').value) * 100),
+    bonus_pct: Number(document.getElementById('p_bonus').value || 0),
+    badge: document.getElementById('p_badge').value.trim() || null,
+    color_key: document.getElementById('p_color').value,
+    sort_order: Number(document.getElementById('p_sort').value || 0),
+    active: document.getElementById('p_active').value === 'true',
+  };
+  const req = id ? api(`/api/admin/token-packs/${id}`, { method:'PUT', body: JSON.stringify(body) })
+                 : api('/api/admin/token-packs', { method:'POST', body: JSON.stringify(body) });
+  req.then(()=>{ closeModal(); toast('Saved'); loadPacks(); }).catch(e=>toast(e.message, true));
+}
+
+function togglePackActive(id, current){
+  api(`/api/admin/token-packs/${id}`, { method:'PUT', body: JSON.stringify({ active: !current }) })
+    .then(()=>{ toast('Updated'); loadPacks(); }).catch(e=>toast(e.message, true));
+}
+
+function deletePack(id, label){
+  if(!confirm(`Delete "${label}"? If it has purchase history, deactivate it instead.`)) return;
+  api(`/api/admin/token-packs/${id}`, { method:'DELETE' }).then(()=>{ toast('Deleted'); loadPacks(); }).catch(e=>toast(e.message, true));
+}
+
+// ── Analytics ──
+function loadAnalytics(){
+  api('/api/admin/analytics').then(d=>{
+    document.getElementById('revenueStats').innerHTML = [
+      ['Total revenue', '$'+(d.revenue.total_revenue_usd_cents/100).toFixed(2)],
+      ['Tokens sold', d.revenue.total_tokens_sold],
+      ['Purchases', d.revenue.purchases_count],
+    ].map(([lbl,val])=>`<div class="stat-tile"><div class="val">${val}</div><div class="lbl">${lbl}</div></div>`).join('');
+
+    document.getElementById('revenueByPackBody').innerHTML = d.revenue.by_pack.length ? d.revenue.by_pack.map(r=>`
+      <tr><td>${esc(r.label)}</td><td>${r.purchases_count}</td><td>${r.tokens_sold}</td><td>$${(r.revenue_usd_cents/100).toFixed(2)}</td></tr>
+    `).join('') : `<tr><td colspan="4" class="empty">No purchases yet.</td></tr>`;
+
+    document.getElementById('usageStats').innerHTML = [
+      ['Boards started', d.usage.boards_started],
+      ['Boards won', d.usage.boards_won],
+      ['Tickets awarded', d.usage.tickets_awarded],
+      ['Tickets available', d.usage.tickets_available],
+    ].map(([lbl,val])=>`<div class="stat-tile"><div class="val">${val}</div><div class="lbl">${lbl}</div></div>`).join('');
+
+    document.getElementById('usageByFestivalBody').innerHTML = d.usage.by_festival.length ? d.usage.by_festival.map(f=>{
+      const attempts = Number(f.cleared) + Number(f.dead);
+      const rate = attempts ? Math.round(Number(f.cleared)/attempts*100) : 0;
+      return `<tr><td>${esc(f.name)}</td><td>${f.boards_started}</td><td>${f.cleared}</td><td>${f.dead}</td><td>${attempts ? rate+'%' : '—'}</td><td>${f.tickets_awarded}/${f.tickets_available}</td></tr>`;
+    }).join('') : `<tr><td colspan="6" class="empty">No board activity yet.</td></tr>`;
+
+    document.getElementById('difficultyBody').innerHTML = d.difficulty.length ? d.difficulty.map(r=>{
+      const attempts = Number(r.cleared) + Number(r.dead);
+      const rate = attempts ? Math.round(Number(r.cleared)/attempts*100) : 0;
+      return `<tr><td>${esc(r.difficulty)}</td><td>${r.cleared}</td><td>${r.dead}</td><td>${attempts ? rate+'%' : '—'}</td></tr>`;
+    }).join('') : `<tr><td colspan="4" class="empty">No attempts yet.</td></tr>`;
+
+    document.getElementById('hardestArtistsBody').innerHTML = d.hardest_artists.length ? d.hardest_artists.map(a=>{
+      const attempts = Number(a.cleared) + Number(a.dead);
+      const rate = attempts ? Math.round(Number(a.dead)/attempts*100) : 0;
+      return `<tr><td>${esc(a.name)}</td><td>${a.cleared}</td><td>${a.dead}</td><td>${attempts ? rate+'%' : '—'}</td></tr>`;
+    }).join('') : `<tr><td colspan="4" class="empty">No attempts yet.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
+}
+
+// ── Global Artists ──
+let globalArtistsCache = [];
+function loadGlobalArtists(){
+  api('/api/admin/global-artists').then(list=>{
+    globalArtistsCache = list;
+    renderGlobalArtists();
+  }).catch(e=>toast(e.message, true));
+}
+
+function renderGlobalArtists(){
+  const q = (document.getElementById('artistSearchInput').value||'').trim().toLowerCase();
+  const list = q ? globalArtistsCache.filter(a=>a.canonical_name.toLowerCase().includes(q)) : globalArtistsCache;
+  document.getElementById('globalArtistsBody').innerHTML = list.length ? list.map(a=>`
+    <tr>
+      <td>${esc(a.canonical_name)}</td>
+      <td>${esc(a.genre||'—')}</td>
+      <td>${a.festivals.length ? a.festivals.map(f=>esc(f.name)).join(', ') : '—'}</td>
+      <td>${a.appearances}</td>
+      <td class="actions">
+        <button class="btn-sm" onclick='openGlobalArtistModal(${JSON.stringify(a)})'>Edit</button>
+        <button class="btn-red btn-sm" onclick="deleteGlobalArtist(${a.id}, '${escAttr(a.canonical_name)}')">Delete</button>
+      </td>
+    </tr>
+  `).join('') : `<tr><td colspan="5" class="empty">No artists found.</td></tr>`;
+}
+
+function openGlobalArtistModal(a){
+  document.getElementById('modalBody').innerHTML = `
+    <h3>Edit artist</h3>
+    <div class="form-grid">
+      <label>Canonical name</label>
+      <input class="full" id="ga_name" value="${escAttr(a.canonical_name||'')}" />
+      <label>Genre</label>
+      <input class="full" id="ga_genre" value="${escAttr(a.genre||'')}" />
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal()">Cancel</button>
+      <button class="btn-blue" onclick="saveGlobalArtist(${a.id})">Save</button>
+    </div>
+  `;
+  document.getElementById('modalOverlay').classList.add('active');
+}
+
+function saveGlobalArtist(id){
+  const body = {
+    canonical_name: document.getElementById('ga_name').value.trim(),
+    genre: document.getElementById('ga_genre').value.trim(),
+  };
+  api(`/api/admin/global-artists/${id}`, { method:'PUT', body: JSON.stringify(body) })
+    .then(()=>{ closeModal(); toast('Saved'); loadGlobalArtists(); }).catch(e=>toast(e.message, true));
+}
+
+function deleteGlobalArtist(id, name){
+  if(!confirm(`Delete "${name}" from the registry? Only possible if it's not linked to any lineup slots.`)) return;
+  api(`/api/admin/global-artists/${id}`, { method:'DELETE' }).then(()=>{ toast('Deleted'); loadGlobalArtists(); }).catch(e=>toast(e.message, true));
+}
+
 // ── Settings ──
 function loadSettings(){
   api('/api/admin/settings').then(s=>{
     document.getElementById('siteLockedToggle').classList.toggle('on', s.site_locked);
     document.getElementById('previewKeyInput').value = s.preview_key || '';
   }).catch(e=>toast(e.message, true));
+  api('/api/admin/festivals').then(list=>{
+    const sel = document.getElementById('spotlightSelect');
+    sel.innerHTML = `<option value="">Auto (soonest live/upcoming)</option>` + list.map(f=>`<option value="${f.id}">${esc(f.name)} (${esc(f.slug)})</option>`).join('');
+    api('/api/admin/settings').then(s=>{ sel.value = s.spotlight_festival_id || ''; }).catch(()=>{});
+  }).catch(e=>toast(e.message, true));
+}
+
+function saveSpotlight(){
+  const val = document.getElementById('spotlightSelect').value;
+  api('/api/admin/settings', { method:'POST', body: JSON.stringify({ spotlight_festival_id: val || null }) })
+    .then(()=>toast('Spotlight saved')).catch(e=>toast(e.message, true));
 }
 
 function toggleSiteLocked(){
