@@ -220,11 +220,24 @@
   .board-legend span{display:inline-flex;align-items:center;gap:5px;}
   .board-legend .lg-dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
 
-  .demo-block{padding:18px 18px 20px;background:var(--bg1);border:1px solid var(--border2);border-radius:8px;margin-bottom:24px;transition:border-color .3s;}
+  .demo-block{padding:18px 18px 20px;background:var(--bg1);border:1px solid var(--border2);border-radius:8px;margin-bottom:24px;transition:border-color .3s,box-shadow .4s;}
   .demo-cell{aspect-ratio:1;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .2s;border:1px solid var(--border2);background:var(--bg2);color:var(--txt2);}
   .demo-cell.active{border-color:var(--blue);background:rgba(77,166,255,0.15);color:var(--blue);animation:pulse .8s infinite;}
   .demo-cell.cleared{border-color:var(--green);background:rgba(0,255,179,0.15);color:var(--green);}
   .demo-cell.dead{border-color:var(--red);background:rgba(255,51,85,0.12);color:var(--red);}
+
+  .demo-block.demo-flash-win{border-color:var(--green);box-shadow:0 0 0 1px var(--green),0 0 24px 2px rgba(0,255,179,0.35);}
+  .demo-block.demo-flash-lose{border-color:var(--red);box-shadow:0 0 0 1px var(--red),0 0 24px 2px rgba(255,51,85,0.3);}
+  .demo-block.demo-flash-win #demo-grid,.demo-block.demo-flash-lose #demo-grid{animation:demoBoardPop .5s cubic-bezier(0.16,1,0.3,1) both;}
+  @keyframes demoBoardPop{0%{transform:scale(1);}45%{transform:scale(1.035);}100%{transform:scale(1);}}
+
+  .demo-quiz{margin-top:10px;padding:10px 11px;border:1px solid var(--border2);border-radius:7px;background:var(--bg2);animation:cardIn .3s cubic-bezier(0.16,1,0.3,1) both;}
+  .demo-quiz .dq-q{font-size:11.5px;font-weight:700;color:var(--txt);margin-bottom:8px;line-height:1.4;}
+  .demo-quiz .dq-choices{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+  .demo-quiz .dq-choice{font-size:10.5px;font-weight:600;padding:6px 8px;border-radius:5px;border:1px solid var(--border2);background:var(--bg1);color:var(--txt2);transition:all .25s;}
+  .demo-quiz .dq-choice.is-correct{border-color:var(--green);background:rgba(0,255,179,0.18);color:var(--green);}
+  .demo-quiz .dq-choice.is-wrong{border-color:var(--red);background:rgba(255,51,85,0.16);color:var(--red);animation:deadShake .4s ease-in-out 1;}
+  .demo-quiz .dq-choice.is-dimmed{opacity:0.45;}
 
   .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:200;align-items:center;justify-content:center;padding:20px;}
   .modal-overlay.open{display:flex;}
@@ -600,14 +613,34 @@ let demoTimeouts = [];
 function clearDemoTimers(){ demoTimeouts.forEach(clearTimeout); demoTimeouts = []; }
 function demoSchedule(fn, delay){ const id = setTimeout(fn, delay); demoTimeouts.push(id); }
 
+// Small, deliberately generic trivia prompts — this board is decorative, not
+// tied to any real festival, so the questions never need to be factually
+// accurate. They just have to look like a real trivia quiz popping up.
+const DEMO_QUIZZES = [
+  { q: "What year did they headline their first festival?", choices: ["2014","2017","2019","2021"] },
+  { q: "Which city was their breakout show in?", choices: ["Austin","Miami","Denver","Chicago"] },
+  { q: "How many studio albums have they released?", choices: ["2","3","4","5"] },
+  { q: "What genre do they primarily perform?", choices: ["Pop","Hip-Hop","EDM","Indie"] },
+  { q: "Which label released their debut single?", choices: ["Indie","Major","Self-released","A collab"] },
+  { q: "What instrument opens their signature track?", choices: ["Synth","Guitar","Drums","Sax"] },
+];
+
+// Runs one full narrative loop: quiz through a winning line (board flashes
+// green), switch to a fresh board, quiz through a bust (board flashes red),
+// then loop back to a new winning board. This is what actually plays in the
+// "See how it works" demo on the homepage — no real backend calls, purely
+// scripted so a first-time visitor sees both outcomes without waiting.
 function runDemo(){
   clearDemoTimers();
+  const blockEl = document.getElementById('demo-block');
   const gridEl = document.getElementById('demo-grid');
   const capEl = document.getElementById('demo-caption');
+  const quizEl = document.getElementById('demo-quiz');
   if (!gridEl) return; // navigated away
 
   const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
   const state = Array(9).fill('locked');
+  let quizN = Math.floor(Math.random() * DEMO_QUIZZES.length);
 
   const setState = (i, s) => { state[i] = s; renderDemoGrid(); };
   const renderDemoGrid = () => {
@@ -615,39 +648,75 @@ function runDemo(){
       <div class="demo-cell ${s}">${s === 'cleared' ? '✓' : s === 'dead' ? '💀' : DEMO_ICONS[i]}</div>
     `).join('');
   };
-  renderDemoGrid();
+  const clearQuiz = () => { if (quizEl) quizEl.innerHTML = ''; };
+  const showQuiz = () => {
+    if (!quizEl) return;
+    const quiz = DEMO_QUIZZES[quizN % DEMO_QUIZZES.length];
+    quizN++;
+    quizEl.innerHTML = `
+      <div class="demo-quiz">
+        <div class="dq-q">🎤 ${quiz.q}</div>
+        <div class="dq-choices">${quiz.choices.map((c, i) => `<div class="dq-choice" data-i="${i}">${c}</div>`).join('')}</div>
+      </div>
+    `;
+  };
+  const revealAnswer = (correct) => {
+    if (!quizEl) return;
+    const els = quizEl.querySelectorAll('.dq-choice');
+    if (!els.length) return;
+    const correctI = Math.floor(Math.random() * els.length);
+    const chosenI = correct ? correctI : (correctI + 1 + Math.floor(Math.random() * (els.length - 1))) % els.length;
+    els.forEach((el, i) => {
+      if (i === correctI) el.classList.add('is-correct');
+      else if (i === chosenI) el.classList.add('is-wrong');
+      else el.classList.add('is-dimmed');
+    });
+  };
+  const flashBoard = (kind) => { if (blockEl) blockEl.classList.add(kind === 'win' ? 'demo-flash-win' : 'demo-flash-lose'); };
+  const unflashBoard = () => { if (blockEl) blockEl.classList.remove('demo-flash-win', 'demo-flash-lose'); };
 
-  const bust = Math.random() < 0.3;
+  renderDemoGrid();
+  clearQuiz();
+  unflashBoard();
+
   let t = 500;
 
-  if (bust) {
-    capEl.textContent = 'A rough run — squares are starting to die off…';
-    const bustSet = [0,1,3,7,8];
-    bustSet.forEach((idx, i) => {
-      demoSchedule(() => { setState(idx, 'active'); }, t); t += 450;
-      demoSchedule(() => {
-        setState(idx, 'dead');
-        capEl.textContent = i < bustSet.length - 1 ? '💀 Wrong answer — that artist is dead for this board…' : '💀 That was the last line…';
-      }, t); t += 550;
-    });
-    demoSchedule(() => { capEl.textContent = '💥 BUSTED — no line is possible anymore. Board over.'; }, t); t += 2400;
-    demoSchedule(runDemo, t);
-    return;
-  }
-
+  // ── Phase 1: quiz through a winning line ──────────────────────────────
   const pattern = lines[Math.floor(Math.random() * lines.length)];
   const distractor = [0,1,2,3,4,5,6,7,8].find(i => !pattern.includes(i));
+
   capEl.textContent = 'Pick any artist square to answer their trivia…';
 
-  demoSchedule(() => { setState(distractor, 'active'); capEl.textContent = 'Attempting an artist quiz…'; }, t); t += 650;
-  demoSchedule(() => { setState(distractor, 'dead'); capEl.textContent = "💀 Didn't clear it — dead for this board, no retry."; }, t); t += 1000;
+  // one wrong pick first, off the winning line — shows a dead square is permanent
+  demoSchedule(() => { setState(distractor, 'active'); capEl.textContent = 'Attempting an artist quiz…'; showQuiz(); }, t); t += 500;
+  demoSchedule(() => { revealAnswer(false); }, t); t += 900;
+  demoSchedule(() => { setState(distractor, 'dead'); clearQuiz(); capEl.textContent = "💀 Didn't clear it — dead for this board, no retry."; }, t); t += 1000;
 
   pattern.forEach((idx, i) => {
-    demoSchedule(() => { setState(idx, 'active'); capEl.textContent = i === 0 ? 'Clearing a line…' : 'Keep going…'; }, t); t += 700;
-    demoSchedule(() => { setState(idx, 'cleared'); capEl.textContent = '✅ Artist cleared!'; }, t); t += 800;
+    demoSchedule(() => { setState(idx, 'active'); capEl.textContent = i === 0 ? 'Clearing a line…' : 'Keep going…'; showQuiz(); }, t); t += 550;
+    demoSchedule(() => { revealAnswer(true); }, t); t += 850;
+    demoSchedule(() => { setState(idx, 'cleared'); clearQuiz(); capEl.textContent = '✅ Correct — artist cleared!'; }, t); t += 650;
   });
 
-  demoSchedule(() => { capEl.textContent = '🎉 Line complete! Ticket won!'; }, t); t += 2600;
+  demoSchedule(() => { capEl.textContent = '🎉 Line complete! Ticket won!'; flashBoard('win'); }, t); t += 2200;
+  demoSchedule(() => { unflashBoard(); capEl.textContent = "Now let's try a different board…"; }, t); t += 1300;
+
+  // ── Phase 2: switch boards, quiz through a bust ───────────────────────
+  demoSchedule(() => { state.fill('locked'); renderDemoGrid(); capEl.textContent = 'New board loaded — pick a square…'; }, t); t += 900;
+
+  const bustSet = [0,1,3,7,8];
+  bustSet.forEach((idx, i) => {
+    demoSchedule(() => { setState(idx, 'active'); capEl.textContent = 'Attempting an artist quiz…'; showQuiz(); }, t); t += 550;
+    demoSchedule(() => { revealAnswer(false); }, t); t += 850;
+    demoSchedule(() => {
+      setState(idx, 'dead');
+      clearQuiz();
+      capEl.textContent = i < bustSet.length - 1 ? '💀 Wrong answer — that artist is dead for this board…' : '💀 That was the last line…';
+    }, t); t += 650;
+  });
+
+  demoSchedule(() => { capEl.textContent = '💥 BUSTED — no line is possible anymore. Board over.'; flashBoard('lose'); }, t); t += 2400;
+  demoSchedule(() => { unflashBoard(); }, t); t += 300;
   demoSchedule(runDemo, t);
 }
 
@@ -662,7 +731,8 @@ function renderDemo(){
         <div class="board-grid" id="demo-grid" style="grid-template-columns:repeat(3,1fr);width:150px;flex-shrink:0;"></div>
         <div style="flex:1;min-width:200px;">
           <div id="demo-caption" style="font-size:12.5px;font-weight:600;color:var(--txt);margin-bottom:6px;min-height:18px;">Watch how the board plays…</div>
-          <div style="font-size:11px;color:var(--txt2);line-height:1.6;">Each square is one artist's trivia, one shot only. Complete any row, column, or diagonal of cleared artists and you win a ticket. Miss enough squares that no line is left possible, and that board's done.</div>
+          <div id="demo-quiz"></div>
+          <div style="font-size:11px;color:var(--txt2);line-height:1.6;margin-top:8px;">Each square is one artist's trivia, one shot only. Complete any row, column, or diagonal of cleared artists and you win a ticket. Miss enough squares that no line is left possible, and that board's done.</div>
         </div>
       </div>
     </div>
