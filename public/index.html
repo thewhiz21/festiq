@@ -116,7 +116,10 @@
   .festival-card.is-upcoming{border-style:dashed;}
   .festival-card.is-upcoming .festival-banner{filter:saturate(0.4) brightness(0.96);}
   .festival-card.is-upcoming .festival-banner::before{opacity:0.22;}
-  .festival-banner{height:88px;display:flex;align-items:flex-end;padding:12px 14px;position:relative;overflow:hidden;isolation:isolate;}
+  .festival-banner{height:88px;display:flex;align-items:flex-end;justify-content:space-between;gap:8px;padding:12px 14px;position:relative;overflow:hidden;isolation:isolate;}
+  .token-badge{position:relative;z-index:2;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:linear-gradient(160deg,#ffe066,#ff9d00);border:2px solid rgba(255,255,255,0.85);box-shadow:0 2px 8px rgba(0,0,0,0.3);color:#4a2e00;line-height:1;}
+  .token-badge .tb-num{font-size:13px;font-weight:800;}
+  .token-badge .tb-lbl{font-size:6px;letter-spacing:0.03em;text-transform:uppercase;font-weight:700;}
   /* City skyline silhouette, tinted to a natural darker shade of whatever
      accent color the banner gradient is using via multiply blending — no
      per-festival artwork needed, it just reads as dusk-over-the-skyline. */
@@ -880,26 +883,32 @@ function renderList(){
       const isLive = f.status === 'live';
       const soldOut = isLive && f.tickets_awarded >= f.tickets_available;
       const cd = daysHoursUntil(f.event_date);
+      // The banner tag now says what STATE the board is in (playable now vs.
+      // not yet), never a countdown — a bare "in 46d" pill there read like
+      // the trivia itself unlocks in 46 days. The actual countdown to the
+      // festival lives down in the body copy as "Festival begins in Xd".
       const tagHTML = !isLive
-        ? `<span class="tag tag-upcoming">⏳ ${cd ? `In ${cd.days}d` : 'Upcoming'}</span>`
+        ? `<span class="tag tag-upcoming">🔒 Board opens soon</span>`
         : soldOut
           ? `<span class="tag tag-won">Tickets Claimed</span>`
           : `<span class="tag tag-live"><span class="lg-livedot"></span>Live</span>`;
+      const tokenBadgeHTML = `<span class="token-badge" title="${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per try"><span class="tb-num">${f.entry_cost_tokens}</span><span class="tb-lbl">Token${f.entry_cost_tokens === 1 ? '' : 's'}</span></span>`;
       return `
       <a class="festival-card ${!isLive ? 'is-upcoming' : ''}" href="/festival/${f.slug}"
          onclick="return handleFestivalLinkClick(event,'/festival/${f.slug}')"
          style="text-decoration:none;color:inherit;--fc-accent:${f.banner_color};">
         <div class="festival-banner" style="background:linear-gradient(135deg, ${f.banner_color}, ${f.banner_color}dd 40%, #ffffff 130%);">
           ${tagHTML}
+          ${tokenBadgeHTML}
         </div>
         <div class="festival-body">
           <h3>${f.name}</h3>
-          <div class="meta">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}${cd ? ` · in ${cd.days}d` : ''}</div>
+          <div class="meta">${f.location || ''} ${f.event_date ? '· ' + f.event_date : ''}${cd ? (isLive ? ` · in ${cd.days}d` : ` · Festival begins in ${cd.days}d`) : ''}</div>
           ${isLive
-            ? `<div class="meta">${f.lineup_count} artists on the board · 🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'}/try</div>
+            ? `<div class="meta">${f.lineup_count} artists on the board</div>
                <div class="meta prize-chip" title="${f.ticket_prize_label} · up to ${f.tickets_available} ticket${f.tickets_available === 1 ? '' : 's'}">🎁 <span class="pc-label">${f.ticket_prize_label}</span><span class="pc-qty">· ×${f.tickets_available}</span></div>`
             : (f.lineup_count
-                ? `<div class="meta">${f.lineup_count} artists locked in · board opens soon</div>`
+                ? `<div class="meta">${f.lineup_count} artists locked in</div>`
                 : `<div class="meta">Lineup drops soon</div>`)}
         </div>
       </a>
