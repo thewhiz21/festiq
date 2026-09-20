@@ -296,8 +296,8 @@ app.get("/festivals", async (req, res) => {
 // client-side navigation from the homepage.
 const STATIC_PAGES = {
   "/pricing": {
-    title: "Pricing — How FestiQ Tokens Work | FestiQ",
-    description: "See how FestiQ prices trivia bingo tokens off each festival's real general-admission ticket price, and check the exact token cost for every festival on the board.",
+    title: "Trivia Tokens — Grab a Stack, Play Any Festival | FestiQ",
+    description: "Trivia Tokens are FestiQ's game currency — grab a stack once, then spend them at any festival board, any time. See how many tokens each festival takes to play.",
   },
   "/faq": {
     title: "FAQ — FestiQ Trivia Bingo",

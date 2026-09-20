@@ -231,7 +231,20 @@
   .demo-block.demo-flash-win #demo-grid,.demo-block.demo-flash-lose #demo-grid{animation:demoBoardPop .5s cubic-bezier(0.16,1,0.3,1) both;}
   @keyframes demoBoardPop{0%{transform:scale(1);}45%{transform:scale(1.035);}100%{transform:scale(1);}}
 
+  .demo-cell.tier-easy{border-color:rgba(0,255,179,0.4);background:rgba(0,255,179,0.07);}
+  .demo-cell.tier-medium{border-color:rgba(255,157,0,0.4);background:rgba(255,157,0,0.07);}
+  .demo-cell.tier-hard{border-color:rgba(255,51,85,0.4);background:rgba(255,51,85,0.07);}
+  .demo-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:9.5px;color:var(--txt2);margin-top:8px;font-weight:600;}
+  .demo-legend span{display:inline-flex;align-items:center;gap:4px;}
+  .demo-legend .lg-dot{width:7px;height:7px;border-radius:50%;display:inline-block;}
+
   .demo-quiz{margin-top:10px;padding:10px 11px;border:1px solid var(--border2);border-radius:7px;background:var(--bg2);animation:cardIn .3s cubic-bezier(0.16,1,0.3,1) both;}
+  .demo-quiz .dq-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;}
+  .demo-quiz .dq-badge{font-size:8.5px;font-weight:800;letter-spacing:0.06em;padding:2px 7px;border-radius:20px;text-transform:uppercase;flex-shrink:0;}
+  .demo-quiz .dq-badge.tier-easy{background:rgba(0,255,179,0.18);color:var(--green);}
+  .demo-quiz .dq-badge.tier-medium{background:rgba(255,157,0,0.18);color:var(--gold);}
+  .demo-quiz .dq-badge.tier-hard{background:rgba(255,51,85,0.18);color:var(--red);}
+  .demo-quiz .dq-progress{font-size:9px;color:var(--txt2);font-weight:700;}
   .demo-quiz .dq-q{font-size:11.5px;font-weight:700;color:var(--txt);margin-bottom:8px;line-height:1.4;}
   .demo-quiz .dq-choices{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
   .demo-quiz .dq-choice{font-size:10.5px;font-weight:600;padding:6px 8px;border-radius:5px;border:1px solid var(--border2);background:var(--bg1);color:var(--txt2);transition:all .25s;}
@@ -326,7 +339,7 @@
   <div class="logo" onclick="navigate('/')">FESTI<span>Q</span></div>
   <div style="display:flex;align-items:center;gap:14px;">
     <div class="nav-links">
-      <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')">Pricing</a>
+      <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')">🎟️ Trivia Tokens</a>
       <a href="/faq" onclick="return handleFestivalLinkClick(event,'/faq')">FAQ</a>
       <a href="/account" id="account-nav-link" onclick="return handleFestivalLinkClick(event,'/account')" style="display:none;">My Account</a>
     </div>
@@ -608,10 +621,26 @@ function spotlightHTML(list){
 
 // ─── Animated "how it works" demo board (mirrors PropQuix's guest demo) ─────
 
-const DEMO_ICONS = ["🎤","🎧","🥁","🎸","🎹","🎺","🕺","🎷","🎻"];
+const DEMO_ICONS = ["🎤","🎧","🥁","🎸","🎹","🎺","🕺","🎷","🎻","🪕","🎪","🪗","🔊","🎵","🪘","🎙️"];
 let demoTimeouts = [];
 function clearDemoTimers(){ demoTimeouts.forEach(clearTimeout); demoTimeouts = []; }
 function demoSchedule(fn, delay){ const id = setTimeout(fn, delay); demoTimeouts.push(id); }
+
+// Mirrors the real corner-ring difficulty mechanic (see server/seed-utils.js
+// CORNER_RING_ORDER_4X4): headliners sit in the 4 corners (easy), the next
+// tier fills the 8 edge cells (medium), and the toughest, least-known acts
+// land in the 4 center cells (hard) — difficulty visibly radiates inward.
+const DEMO_TIERS = { easy: [0,3,12,15], medium: [1,2,4,7,8,11,13,14], hard: [5,6,9,10] };
+const DEMO_TIER_META = {
+  easy: { label: 'EASY', dot: 'var(--green)' },
+  medium: { label: 'MEDIUM', dot: 'var(--gold)' },
+  hard: { label: 'HARD', dot: 'var(--red)' },
+};
+function demoTierFor(i){
+  if (DEMO_TIERS.easy.includes(i)) return 'easy';
+  if (DEMO_TIERS.medium.includes(i)) return 'medium';
+  return 'hard';
+}
 
 // Small, deliberately generic trivia prompts — this board is decorative, not
 // tied to any real festival, so the questions never need to be factually
@@ -623,7 +652,17 @@ const DEMO_QUIZZES = [
   { q: "What genre do they primarily perform?", choices: ["Pop","Hip-Hop","EDM","Indie"] },
   { q: "Which label released their debut single?", choices: ["Indie","Major","Self-released","A collab"] },
   { q: "What instrument opens their signature track?", choices: ["Synth","Guitar","Drums","Sax"] },
+  { q: "Which year did they last headline this festival?", choices: ["2019","2021","2023","Never"] },
+  { q: "How many members are in the group?", choices: ["1","3","4","6"] },
 ];
+
+// A real board asks 7 questions per artist before a square clears or dies;
+// the demo compresses that to a short round of ROUND_LEN so the idea reads
+// clearly without the animation dragging — "one question" was never the
+// real mechanic, just an artifact of the old, too-simple demo.
+const ROUND_LEN = 3;
+const Q_SHOW_MS = 2400;   // how long a question sits on screen before it's answered
+const Q_REVEAL_MS = 1500; // how long the correct/wrong reveal holds before moving on
 
 // Runs one full narrative loop: quiz through a winning line (board flashes
 // green), switch to a fresh board, quiz through a bust (board flashes red),
@@ -638,23 +677,32 @@ function runDemo(){
   const quizEl = document.getElementById('demo-quiz');
   if (!gridEl) return; // navigated away
 
-  const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-  const state = Array(9).fill('locked');
+  const CELLS = 16;
+  // every 4-in-a-row on this grid that passes through the two hardest
+  // (center) cells — picking one of these as the "winning" line means the
+  // demo visibly climbs into harder trivia before landing the win.
+  const lines = [[4,5,6,7],[8,9,10,11],[0,5,10,15],[3,6,9,12]];
+  const state = Array(CELLS).fill('locked');
   let quizN = Math.floor(Math.random() * DEMO_QUIZZES.length);
 
   const setState = (i, s) => { state[i] = s; renderDemoGrid(); };
   const renderDemoGrid = () => {
     gridEl.innerHTML = state.map((s, i) => `
-      <div class="demo-cell ${s}">${s === 'cleared' ? '✓' : s === 'dead' ? '💀' : DEMO_ICONS[i]}</div>
+      <div class="demo-cell ${s} ${s === 'locked' ? 'tier-' + demoTierFor(i) : ''}">${s === 'cleared' ? '✓' : s === 'dead' ? '💀' : DEMO_ICONS[i]}</div>
     `).join('');
   };
   const clearQuiz = () => { if (quizEl) quizEl.innerHTML = ''; };
-  const showQuiz = () => {
+  const showQuiz = (tier, qNum) => {
     if (!quizEl) return;
     const quiz = DEMO_QUIZZES[quizN % DEMO_QUIZZES.length];
     quizN++;
+    const meta = DEMO_TIER_META[tier];
     quizEl.innerHTML = `
       <div class="demo-quiz">
+        <div class="dq-head">
+          <span class="dq-badge tier-${tier}">${meta.label}</span>
+          <span class="dq-progress">QUESTION ${qNum} OF ${ROUND_LEN}</span>
+        </div>
         <div class="dq-q">🎤 ${quiz.q}</div>
         <div class="dq-choices">${quiz.choices.map((c, i) => `<div class="dq-choice" data-i="${i}">${c}</div>`).join('')}</div>
       </div>
@@ -679,44 +727,67 @@ function runDemo(){
   clearQuiz();
   unflashBoard();
 
-  let t = 500;
+  let t = 900;
 
-  // ── Phase 1: quiz through a winning line ──────────────────────────────
+  // Schedules a full ROUND_LEN-question round on one square, then clears or
+  // kills it. `pass` decides the outcome; harder tiers miss more questions
+  // along the way even when they ultimately pass, since a real hard-tier
+  // artist only needs 5 of 7 right, not a perfect run.
+  const scheduleRound = (idx, activeCaption, pass) => {
+    const tier = demoTierFor(idx);
+    demoSchedule(() => { setState(idx, 'active'); capEl.textContent = activeCaption; }, t); t += 400;
+    for (let qi = 0; qi < ROUND_LEN; qi++) {
+      const isMissStep = tier === 'hard' ? qi < 2 && !pass : qi === 1 && !pass;
+      const correct = pass ? true : !isMissStep;
+      demoSchedule(() => { showQuiz(tier, qi + 1); }, t); t += Q_SHOW_MS;
+      demoSchedule(() => { revealAnswer(correct); }, t); t += Q_REVEAL_MS;
+    }
+    demoSchedule(() => {
+      clearQuiz();
+      setState(idx, pass ? 'cleared' : 'dead');
+      capEl.textContent = pass
+        ? `✅ ${DEMO_TIER_META[tier].label.charAt(0) + DEMO_TIER_META[tier].label.slice(1).toLowerCase()} artist cleared!`
+        : "💀 Didn't clear it — dead for this board, no retry.";
+    }, t); t += 900;
+  };
+
+  // ── Phase 1: quiz through a winning line, easy square first ───────────
   const pattern = lines[Math.floor(Math.random() * lines.length)];
-  const distractor = [0,1,2,3,4,5,6,7,8].find(i => !pattern.includes(i));
+  const distractor = DEMO_TIERS.easy.find(i => !pattern.includes(i));
 
   capEl.textContent = 'Pick any artist square to answer their trivia…';
+  demoSchedule(() => {}, t); t += 600;
 
-  // one wrong pick first, off the winning line — shows a dead square is permanent
-  demoSchedule(() => { setState(distractor, 'active'); capEl.textContent = 'Attempting an artist quiz…'; showQuiz(); }, t); t += 500;
-  demoSchedule(() => { revealAnswer(false); }, t); t += 900;
-  demoSchedule(() => { setState(distractor, 'dead'); clearQuiz(); capEl.textContent = "💀 Didn't clear it — dead for this board, no retry."; }, t); t += 1000;
+  scheduleRound(distractor, 'Starting with an easy corner headliner…', false);
+  t += 500;
 
   pattern.forEach((idx, i) => {
-    demoSchedule(() => { setState(idx, 'active'); capEl.textContent = i === 0 ? 'Clearing a line…' : 'Keep going…'; showQuiz(); }, t); t += 550;
-    demoSchedule(() => { revealAnswer(true); }, t); t += 850;
-    demoSchedule(() => { setState(idx, 'cleared'); clearQuiz(); capEl.textContent = '✅ Correct — artist cleared!'; }, t); t += 650;
+    const tier = demoTierFor(idx);
+    const tierWord = DEMO_TIER_META[tier].label.toLowerCase();
+    const caption = i === 0
+      ? `Now a${tierWord === 'easy' ? 'n' : ''} ${tierWord}-tier pick…`
+      : (tier === 'hard' ? 'Into the hardest, least-known acts…' : 'Keep going, difficulty climbing…');
+    scheduleRound(idx, caption, true);
+    t += 500;
   });
 
-  demoSchedule(() => { capEl.textContent = '🎉 Line complete! Ticket won!'; flashBoard('win'); }, t); t += 2200;
-  demoSchedule(() => { unflashBoard(); capEl.textContent = "Now let's try a different board…"; }, t); t += 1300;
+  demoSchedule(() => { capEl.textContent = '🎉 Line complete — easy to hard, all cleared! Ticket won!'; flashBoard('win'); }, t); t += 3200;
+  demoSchedule(() => { unflashBoard(); capEl.textContent = "Now let's try a different board…"; }, t); t += 2000;
 
-  // ── Phase 2: switch boards, quiz through a bust ───────────────────────
-  demoSchedule(() => { state.fill('locked'); renderDemoGrid(); capEl.textContent = 'New board loaded — pick a square…'; }, t); t += 900;
+  // ── Phase 2: switch boards, difficulty climbs into a bust ─────────────
+  demoSchedule(() => { state.fill('locked'); renderDemoGrid(); capEl.textContent = 'New board loaded — pick a square…'; }, t); t += 1500;
 
-  const bustSet = [0,1,3,7,8];
+  const bustSet = [...DEMO_TIERS.easy.slice(0, 1), ...DEMO_TIERS.medium.slice(0, 2), ...DEMO_TIERS.hard.slice(0, 2)];
   bustSet.forEach((idx, i) => {
-    demoSchedule(() => { setState(idx, 'active'); capEl.textContent = 'Attempting an artist quiz…'; showQuiz(); }, t); t += 550;
-    demoSchedule(() => { revealAnswer(false); }, t); t += 850;
-    demoSchedule(() => {
-      setState(idx, 'dead');
-      clearQuiz();
-      capEl.textContent = i < bustSet.length - 1 ? '💀 Wrong answer — that artist is dead for this board…' : '💀 That was the last line…';
-    }, t); t += 650;
+    const tier = demoTierFor(idx);
+    const tierWord2 = DEMO_TIER_META[tier].label.toLowerCase();
+    const caption = i === bustSet.length - 1 ? 'Last shot — the toughest square on the board…' : `Trying a${tierWord2 === 'easy' ? 'n' : ''} ${tierWord2}-tier square…`;
+    scheduleRound(idx, caption, false);
+    t += 500;
   });
 
-  demoSchedule(() => { capEl.textContent = '💥 BUSTED — no line is possible anymore. Board over.'; flashBoard('lose'); }, t); t += 2400;
-  demoSchedule(() => { unflashBoard(); }, t); t += 300;
+  demoSchedule(() => { capEl.textContent = '💥 BUSTED — the hard squares got tougher, no line left. Board over.'; flashBoard('lose'); }, t); t += 3200;
+  demoSchedule(() => { unflashBoard(); }, t); t += 500;
   demoSchedule(runDemo, t);
 }
 
@@ -728,11 +799,18 @@ function renderDemo(){
         <div style="font-size:10px;color:var(--txt2);letter-spacing:0.06em;">DEMO — not a real board</div>
       </div>
       <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;justify-content:center;">
-        <div class="board-grid" id="demo-grid" style="grid-template-columns:repeat(3,1fr);width:150px;flex-shrink:0;"></div>
+        <div style="flex-shrink:0;">
+          <div class="board-grid" id="demo-grid" style="grid-template-columns:repeat(4,1fr);width:184px;"></div>
+          <div class="demo-legend">
+            <span><span class="lg-dot" style="background:var(--green);"></span>Easy · corners</span>
+            <span><span class="lg-dot" style="background:var(--gold);"></span>Medium · edges</span>
+            <span><span class="lg-dot" style="background:var(--red);"></span>Hard · center</span>
+          </div>
+        </div>
         <div style="flex:1;min-width:200px;">
           <div id="demo-caption" style="font-size:12.5px;font-weight:600;color:var(--txt);margin-bottom:6px;min-height:18px;">Watch how the board plays…</div>
           <div id="demo-quiz"></div>
-          <div style="font-size:11px;color:var(--txt2);line-height:1.6;margin-top:8px;">Each square is one artist's trivia, one shot only. Complete any row, column, or diagonal of cleared artists and you win a ticket. Miss enough squares that no line is left possible, and that board's done.</div>
+          <div style="font-size:11px;color:var(--txt2);line-height:1.6;margin-top:8px;">Each square is a short round of trivia about that artist — headliners in the corners are easy, but it gets tougher toward the center. Complete any row, column, or diagonal of cleared artists and you win a ticket. Miss enough squares that no line is left possible, and that board's done.</div>
         </div>
       </div>
     </div>
@@ -817,27 +895,27 @@ function renderList(){
 // file yet) so nothing about cost is a mystery.
 function renderPricing(){
   clearDemoTimers();
-  document.title = 'Pricing — Buy Tokens, Play Any Festival | FestiQ';
+  document.title = 'Trivia Tokens — Grab a Stack, Play Any Festival | FestiQ';
   const app = document.getElementById('app');
   app.innerHTML = `
     <a href="/" onclick="return handleFestivalLinkClick(event,'/')" class="backlink">← ALL FESTIVALS</a>
     <div class="hero" style="margin-top:10px;">
-      <div class="eyebrow">Pricing</div>
+      <div class="eyebrow">🎟️ Trivia Tokens</div>
       <h1>GRAB A STACK OF <span style="color:var(--gold);">TOKENS</span>, PLAY ANY GAME</h1>
-      <p>Same idea as walking up to the counter at a carnival or an arcade: buy a stack of tokens once, then spend them on any board, at any festival, whenever you want. No card, no checkout, no mental math while you're playing — just tokens in your pocket.</p>
+      <p>Think arcade tokens, not a bill — grab a stack once, then spend them on any board, at any festival, whenever the mood hits. No card at the door, no checkout mid-game, just tokens in your pocket and a board to clear.</p>
     </div>
 
     <div class="poster-panel">
       <div class="section-label" style="margin-bottom:4px;">The Token Shop</div>
-      <div style="font-size:11px;color:var(--txt2);margin-bottom:4px;">Bigger stacks stretch further — the more you grab at once, the more bonus tokens ride along.</div>
+      <div style="font-size:11px;color:var(--txt2);margin-bottom:4px;">Bigger stacks stretch further — the more you grab at once, the more bonus tokens ride along for free.</div>
       <div class="pack-grid" id="pricing-pack-grid"></div>
       <div style="text-align:center;margin-top:16px;">
-        <button class="btn btn-purple" onclick="openTokenShop()">🎟️ BUY TOKENS</button>
+        <button class="btn btn-purple" onclick="openTokenShop()">🎟️ GRAB TOKENS</button>
       </div>
     </div>
 
     <div class="poster-panel">
-      <div class="section-label" style="margin-bottom:14px;">How many tokens does it take to play?</div>
+      <div class="section-label" style="margin-bottom:14px;">How tokens work</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">
         <div style="text-align:center;">
           <div style="font-size:26px;margin-bottom:6px;">🎤</div>
@@ -846,13 +924,13 @@ function renderPricing(){
         </div>
         <div style="text-align:center;">
           <div style="font-size:26px;margin-bottom:6px;">🎡</div>
-          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">Bigger show, more tokens</div>
-          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">The same way a bigger prize costs more tickets at the fair, festivals with a bigger real ticket value cost a few more tokens per try.</div>
+          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">Bigger show, a few more tokens</div>
+          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">Same as a bigger prize taking more tickets at the fair — the marquee festivals just ask for a couple extra tokens per try.</div>
         </div>
         <div style="text-align:center;">
-          <div style="font-size:26px;margin-bottom:6px;">🎟️</div>
-          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">The tokens don't change</div>
-          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">What a token itself is worth never changes mid-game — only how many a given festival asks for.</div>
+          <div style="font-size:26px;margin-bottom:6px;">🎉</div>
+          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px;">Free token to start</div>
+          <div style="font-size:11px;color:var(--txt2);line-height:1.5;">Every new account gets a free token, so you can try clearing a square before grabbing any more.</div>
         </div>
       </div>
     </div>
