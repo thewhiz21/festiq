@@ -471,6 +471,59 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+// ─── Pageview tracking (stopgap until GTM/GA is wired up) ──────────────────
+// Classifies a raw referrer URL into a coarse traffic source so "are people
+// finding us via Google" is a one-glance answer in the admin panel, without
+// needing a real analytics tool yet. Kept intentionally simple — this isn't
+// trying to replace GA's channel grouping, just answer that one question.
+const SEARCH_ENGINE_HOSTS = {
+  google: "google",
+  "google.com": "google",
+  bing: "other_search",
+  "bing.com": "other_search",
+  yahoo: "other_search",
+  duckduckgo: "other_search",
+  "duckduckgo.com": "other_search",
+  baidu: "other_search",
+  ecosia: "other_search",
+};
+const SOCIAL_HOSTS = [
+  "facebook.com", "instagram.com", "t.co", "twitter.com", "x.com",
+  "tiktok.com", "reddit.com", "linkedin.com", "pinterest.com", "youtube.com", "threads.net",
+];
+
+function classifyReferrer(referrerHost) {
+  if (!referrerHost) return "direct";
+  const host = referrerHost.toLowerCase().replace(/^www\./, "");
+  for (const [needle, type] of Object.entries(SEARCH_ENGINE_HOSTS)) {
+    if (host.includes(needle)) return needle === "google" || needle === "google.com" ? "google" : type;
+  }
+  if (SOCIAL_HOSTS.some((s) => host.includes(s))) return "social";
+  return "referral";
+}
+
+app.post("/api/track", async (req, res) => {
+  try {
+    // Never let a broken tracking beacon be visible to the visitor — this
+    // endpoint fails silently either way.
+    if (isKnownCrawler(req.headers["user-agent"])) return res.status(204).end();
+    const pagePath = String(req.body?.path || "").slice(0, 255);
+    const referrer = req.body?.referrer ? String(req.body.referrer).slice(0, 500) : null;
+    let referrerHost = null;
+    if (referrer) {
+      try { referrerHost = new URL(referrer).hostname; } catch { /* not a valid absolute URL — ignore */ }
+    }
+    const sourceType = classifyReferrer(referrerHost);
+    await pool.query(
+      `INSERT INTO page_views (path, referrer, referrer_host, source_type, user_agent) VALUES ($1, $2, $3, $4, $5)`,
+      [pagePath, referrer, referrerHost, sourceType, (req.headers["user-agent"] || "").slice(0, 300)]
+    );
+    res.status(204).end();
+  } catch (err) {
+    res.status(204).end(); // tracking must never surface an error to the visitor
+  }
+});
+
 // ─── Festivals ──────────────────────────────────────────────────────────────
 
 app.get("/api/festivals", async (req, res) => {
@@ -1403,6 +1456,47 @@ app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
       usage: { ...usageTotals.rows[0], by_festival: usageByFestival.rows },
       difficulty: byDifficulty.rows,
       hardest_artists: hardestArtists.rows,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Traffic (stopgap pageview log) ────────────────────────────────────────
+app.get("/api/admin/traffic", requireAdmin, async (req, res) => {
+  try {
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days) || 30));
+    const [totals, bySource, byDay, topPages, topReferrers] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS total_views FROM page_views WHERE created_at > NOW() - ($1 || ' days')::interval`, [days]),
+      pool.query(`
+        SELECT source_type, COUNT(*)::int AS views
+        FROM page_views WHERE created_at > NOW() - ($1 || ' days')::interval
+        GROUP BY source_type ORDER BY views DESC
+      `, [days]),
+      pool.query(`
+        SELECT date_trunc('day', created_at)::date AS day, COUNT(*)::int AS views,
+               COUNT(*) FILTER (WHERE source_type = 'google')::int AS google_views
+        FROM page_views WHERE created_at > NOW() - ($1 || ' days')::interval
+        GROUP BY day ORDER BY day ASC
+      `, [days]),
+      pool.query(`
+        SELECT path, COUNT(*)::int AS views
+        FROM page_views WHERE created_at > NOW() - ($1 || ' days')::interval
+        GROUP BY path ORDER BY views DESC LIMIT 15
+      `, [days]),
+      pool.query(`
+        SELECT referrer_host, source_type, COUNT(*)::int AS views
+        FROM page_views WHERE created_at > NOW() - ($1 || ' days')::interval AND referrer_host IS NOT NULL
+        GROUP BY referrer_host, source_type ORDER BY views DESC LIMIT 15
+      `, [days]),
+    ]);
+    res.json({
+      days,
+      total_views: totals.rows[0].total_views,
+      by_source: bySource.rows,
+      by_day: byDay.rows,
+      top_pages: topPages.rows,
+      top_referrers: topReferrers.rows,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

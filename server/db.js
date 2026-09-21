@@ -163,6 +163,25 @@ async function initSchema() {
       price_usd_cents INTEGER,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+
+    -- Minimal in-house pageview log so we can see traffic sources (Google
+    -- vs. direct vs. social vs. other referrers) before a real analytics
+    -- tool (GTM/GA) is wired up. One row per page render on the public
+    -- site; source_type is pre-classified server-side at write time from
+    -- the referrer's hostname so the admin dashboard doesn't need to
+    -- reimplement that logic in every query. Admin panel and bot traffic
+    -- are filtered out before this table is ever written to (see
+    -- isKnownCrawler / the /admin path check in server.js), not here.
+    CREATE TABLE IF NOT EXISTS page_views (
+      id SERIAL PRIMARY KEY,
+      path TEXT NOT NULL,
+      referrer TEXT,
+      referrer_host TEXT,
+      source_type TEXT NOT NULL DEFAULT 'direct', -- google | other_search | social | referral | direct
+      user_agent TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_page_views_created_at ON page_views (created_at);
   `);
 }
 

@@ -136,6 +136,7 @@
     <button data-tab="token-packs" onclick="switchTab('token-packs')">Token Packs</button>
     <button data-tab="analytics" onclick="switchTab('analytics')">Analytics</button>
     <button data-tab="global-artists" onclick="switchTab('global-artists')">Artist DB</button>
+    <button data-tab="traffic" onclick="switchTab('traffic')">Traffic</button>
     <button data-tab="settings" onclick="switchTab('settings')">Settings</button>
   </nav>
 
@@ -287,6 +288,47 @@
       </div>
     </div>
 
+    <!-- TRAFFIC -->
+    <div class="tab" id="tab-traffic">
+      <div class="card">
+        <h2>Traffic <small>stopgap pageview log — no GTM/GA wired up yet</small>
+          <select id="trafficDays" onchange="loadTraffic()" style="width:auto;">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </h2>
+        <div class="stat-row" id="trafficStats"></div>
+      </div>
+      <div class="card">
+        <h2>Traffic by source</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Source</th><th>Views</th><th>% of total</th></tr></thead>
+            <tbody id="trafficSourceBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Top pages</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Path</th><th>Views</th></tr></thead>
+            <tbody id="trafficPagesBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Top referrers</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Referrer domain</th><th>Source type</th><th>Views</th></tr></thead>
+            <tbody id="trafficReferrersBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div class="tab" id="tab-settings">
       <div class="card">
@@ -383,6 +425,7 @@ function switchTab(name){
   if(name==='token-packs') loadPacks();
   if(name==='analytics') loadAnalytics();
   if(name==='global-artists') loadGlobalArtists();
+  if(name==='traffic') loadTraffic();
   if(name==='settings') loadSettings();
 }
 
@@ -930,6 +973,32 @@ function saveGlobalArtist(id){
 function deleteGlobalArtist(id, name){
   if(!confirm(`Delete "${name}" from the registry? Only possible if it's not linked to any lineup slots.`)) return;
   api(`/api/admin/global-artists/${id}`, { method:'DELETE' }).then(()=>{ toast('Deleted'); loadGlobalArtists(); }).catch(e=>toast(e.message, true));
+}
+
+// ── Traffic ──
+const SOURCE_LABELS = { google: 'Google', other_search: 'Other search', social: 'Social', referral: 'Other referral', direct: 'Direct / no referrer' };
+function loadTraffic(){
+  const days = document.getElementById('trafficDays').value || 30;
+  api(`/api/admin/traffic?days=${days}`).then(d=>{
+    const googleViews = (d.by_source.find(s=>s.source_type==='google')||{}).views || 0;
+    document.getElementById('trafficStats').innerHTML = [
+      ['Total pageviews', d.total_views],
+      ['From Google', googleViews],
+      ['Days shown', d.days],
+    ].map(([lbl,val])=>`<div class="stat-tile"><div class="val">${val}</div><div class="lbl">${lbl}</div></div>`).join('');
+
+    document.getElementById('trafficSourceBody').innerHTML = d.by_source.length ? d.by_source.map(s=>`
+      <tr><td>${esc(SOURCE_LABELS[s.source_type] || s.source_type)}</td><td>${s.views}</td><td>${d.total_views ? Math.round(s.views/d.total_views*100) : 0}%</td></tr>
+    `).join('') : `<tr><td colspan="3" class="empty">No pageviews logged yet.</td></tr>`;
+
+    document.getElementById('trafficPagesBody').innerHTML = d.top_pages.length ? d.top_pages.map(p=>`
+      <tr><td>${esc(p.path)}</td><td>${p.views}</td></tr>
+    `).join('') : `<tr><td colspan="2" class="empty">No pageviews logged yet.</td></tr>`;
+
+    document.getElementById('trafficReferrersBody').innerHTML = d.top_referrers.length ? d.top_referrers.map(r=>`
+      <tr><td>${esc(r.referrer_host)}</td><td>${esc(SOURCE_LABELS[r.source_type] || r.source_type)}</td><td>${r.views}</td></tr>
+    `).join('') : `<tr><td colspan="3" class="empty">No external referrers yet.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
 }
 
 // ── Settings ──

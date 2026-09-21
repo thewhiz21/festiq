@@ -606,6 +606,24 @@ function render(){
   else if (path === '/faq') renderFAQ();
   else if (path === '/account') renderAccount();
   else renderList();
+  trackPageview(path);
+}
+
+// Stopgap pageview logging until GTM/GA is wired up — just enough to answer
+// "are people finding us via Google" from the admin panel. document.referrer
+// reflects how the browser tab was originally opened, so it stays the same
+// across client-side route changes within one visit — that's fine here,
+// since every pageview in the session gets attributed to that same original
+// source, which is what "where did this visit come from" actually means.
+function trackPageview(path){
+  const payload = JSON.stringify({ path, referrer: document.referrer || null });
+  try {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(`${API}/api/track`, new Blob([payload], { type: 'application/json' }));
+    } else {
+      fetch(`${API}/api/track`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(()=>{});
+    }
+  } catch (e) { /* tracking must never break the page */ }
 }
 
 // A plain left-click on a real <a href="/festival/slug"> intercepts into
