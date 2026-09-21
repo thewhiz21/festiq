@@ -759,8 +759,15 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
     const cell = cells.find((c) => c.artist_id === artist.id);
     if (!cell || cell.status !== "available") return res.status(409).json({ error: "This artist square is no longer available" });
 
-    // Clear any stale pending attempt for this square before starting fresh.
-    await pool.query(`DELETE FROM pending_attempts WHERE user_id = $1 AND festival_id = $2 AND artist_id = $3`, [req.user.id, festival.id, artist.id]);
+    // Clear any stale pending attempt for this square before starting fresh
+    // — and mark its permanent game_attempts record abandoned rather than
+    // just vanishing it, so a player who bailed mid-quiz (closed the tab,
+    // let it expire) still leaves a row admin can find later.
+    const { rows: staleRows } = await pool.query(`SELECT id FROM pending_attempts WHERE user_id = $1 AND festival_id = $2 AND artist_id = $3`, [req.user.id, festival.id, artist.id]);
+    if (staleRows.length) {
+      await pool.query(`DELETE FROM pending_attempts WHERE user_id = $1 AND festival_id = $2 AND artist_id = $3`, [req.user.id, festival.id, artist.id]);
+      await pool.query(`UPDATE game_attempts SET status = 'abandoned', resolved_at = NOW() WHERE id = ANY($1) AND status = 'in_progress'`, [staleRows.map((r) => r.id)]);
+    }
 
     const wallet = await getOrCreateWallet(req.user.id);
     if (wallet.tokens < festival.entry_cost_tokens) return res.status(402).json({ error: "Not enough tokens — buy more or claim your free daily token" });
@@ -811,10 +818,19 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
       `INSERT INTO pending_attempts (user_id, festival_id, artist_id, questions_json) VALUES ($1, $2, $3, $4) RETURNING id`,
       [req.user.id, festival.id, artist.id, JSON.stringify({ items: shuffled, passThreshold })]
     );
+    const attemptId = inserted.rows[0].id;
+    // Permanent record, same id as the pending_attempts row above — this is
+    // the "Game #N" a player sees on screen, and what admin looks up later
+    // for stats or a support dispute. See db.js for why it's a separate
+    // table from pending_attempts rather than just not deleting that one.
+    await pool.query(
+      `INSERT INTO game_attempts (id, user_id, festival_id, artist_id, tokens_spent, question_count, pass_threshold, status) VALUES ($1, $2, $3, $4, $5, $6, $7, 'in_progress')`,
+      [attemptId, req.user.id, festival.id, artist.id, festival.entry_cost_tokens, shuffled.length, passThreshold]
+    );
 
     const updatedWallet = await getOrCreateWallet(req.user.id);
     res.json({
-      attempt_id: inserted.rows[0].id,
+      attempt_id: attemptId,
       artist: { id: artist.id, name: artist.name, genre: artist.genre, difficulty: artist.difficulty },
       pass_threshold: passThreshold,
       level,
@@ -840,6 +856,7 @@ app.post("/api/festivals/:slug/answer", requireAuth, async (req, res) => {
     const age = Date.now() - new Date(pending.created_at).getTime();
     if (age > PENDING_TTL_MS) {
       await pool.query(`DELETE FROM pending_attempts WHERE id = $1`, [attempt_id]);
+      await pool.query(`UPDATE game_attempts SET status = 'abandoned', resolved_at = NOW() WHERE id = $1 AND status = 'in_progress'`, [attempt_id]);
       return res.status(410).json({ error: "This quiz expired — start a new one" });
     }
 
@@ -890,9 +907,17 @@ app.post("/api/festivals/:slug/submit", requireAuth, async (req, res) => {
     );
     if (cellUpdate.rowCount === 0) {
       await pool.query(`DELETE FROM pending_attempts WHERE id = $1`, [attempt_id]);
+      await pool.query(`UPDATE game_attempts SET status = 'abandoned', resolved_at = NOW() WHERE id = $1 AND status = 'in_progress'`, [attempt_id]);
       return res.status(409).json({ error: "This square was already resolved — refresh your board" });
     }
     await pool.query(`DELETE FROM pending_attempts WHERE id = $1`, [attempt_id]);
+    // Finalize the permanent record — full Q&A transcript included, since
+    // this is exactly what admin needs to pull up for a "why is this dead,
+    // I know I got that right" support conversation.
+    await pool.query(
+      `UPDATE game_attempts SET status = $1, correct_count = $2, questions_json = $3, resolved_at = NOW() WHERE id = $4`,
+      [passed ? "passed" : "dead", correctCount, JSON.stringify({ items, breakdown }), attempt_id]
+    );
 
     const { rows: artists } = await pool.query(`SELECT * FROM artists WHERE festival_id = $1 ORDER BY position ASC`, [festival.id]);
     const gridSize = gridSizeForArtistCount(artists.length);
@@ -1085,6 +1110,7 @@ app.delete("/api/admin/festivals/:id", requireAdmin, async (req, res) => {
     await pool.query(`DELETE FROM board_cells WHERE board_id IN (SELECT id FROM boards WHERE festival_id = $1)`, [id]);
     await pool.query(`DELETE FROM boards WHERE festival_id = $1`, [id]);
     await pool.query(`DELETE FROM pending_attempts WHERE festival_id = $1`, [id]);
+    await pool.query(`DELETE FROM game_attempts WHERE festival_id = $1`, [id]);
     await pool.query(`DELETE FROM tickets_won WHERE festival_id = $1`, [id]);
     await pool.query(`DELETE FROM questions WHERE artist_id IN (SELECT id FROM artists WHERE festival_id = $1)`, [id]);
     await pool.query(`DELETE FROM artists WHERE festival_id = $1`, [id]);
@@ -1147,6 +1173,8 @@ app.delete("/api/admin/artists/:id", requireAdmin, async (req, res) => {
   try {
     const id = req.params.id;
     await pool.query(`DELETE FROM board_cells WHERE artist_id = $1`, [id]);
+    await pool.query(`DELETE FROM pending_attempts WHERE artist_id = $1`, [id]);
+    await pool.query(`DELETE FROM game_attempts WHERE artist_id = $1`, [id]);
     await pool.query(`DELETE FROM questions WHERE artist_id = $1`, [id]);
     const { rowCount } = await pool.query(`DELETE FROM artists WHERE id = $1`, [id]);
     if (!rowCount) return res.status(404).json({ error: "Artist not found" });
@@ -1255,6 +1283,7 @@ app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
     await pool.query(`DELETE FROM board_cells WHERE board_id IN (SELECT id FROM boards WHERE user_id = $1)`, [id]);
     await pool.query(`DELETE FROM boards WHERE user_id = $1`, [id]);
     await pool.query(`DELETE FROM pending_attempts WHERE user_id = $1`, [id]);
+    await pool.query(`DELETE FROM game_attempts WHERE user_id = $1`, [id]);
     await pool.query(`DELETE FROM tickets_won WHERE user_id = $1`, [id]);
     await pool.query(`DELETE FROM token_purchases WHERE user_id = $1`, [id]);
     await pool.query(`DELETE FROM wallets WHERE user_id = $1`, [id]);
@@ -1301,6 +1330,65 @@ app.post("/api/admin/tickets/:id/fulfill", requireAdmin, async (req, res) => {
     const { rows } = await pool.query(`UPDATE tickets_won SET fulfilled = $2 WHERE id = $1 RETURNING *`, [req.params.id, fulfilled]);
     if (!rows.length) return res.status(404).json({ error: "Ticket not found" });
     res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Game log (permanent per-attempt record) ────────────────────────────────
+// Every "Game #N" a player sees in the confirm-play modal and the quiz
+// header lives here forever, so a support conversation ("I answered that
+// right, why did it die") or a stats question can be resolved by pulling
+// up the exact record instead of trusting anyone's memory of what happened.
+app.get("/api/admin/game-attempts", requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+    const filters = [];
+    const params = [];
+    if (req.query.status) { params.push(req.query.status); filters.push(`ga.status = $${params.length}`); }
+    if (req.query.user_email) { params.push(`%${req.query.user_email.toLowerCase()}%`); filters.push(`LOWER(u.email) LIKE $${params.length}`); }
+    if (req.query.festival_id) { params.push(req.query.festival_id); filters.push(`ga.festival_id = $${params.length}`); }
+    if (req.query.id) { params.push(req.query.id); filters.push(`ga.id = $${params.length}`); }
+    const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+    params.push(limit);
+    const { rows } = await pool.query(
+      `SELECT ga.id, ga.status, ga.tokens_spent, ga.question_count, ga.pass_threshold, ga.correct_count,
+              ga.started_at, ga.resolved_at,
+              u.email AS user_email, u.display_name AS user_name,
+              f.name AS festival_name, f.slug AS festival_slug,
+              a.name AS artist_name, a.difficulty AS artist_difficulty
+       FROM game_attempts ga
+       JOIN users u ON u.id = ga.user_id
+       JOIN festivals f ON f.id = ga.festival_id
+       JOIN artists a ON a.id = ga.artist_id
+       ${where}
+       ORDER BY ga.started_at DESC LIMIT $${params.length}`,
+      params
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/admin/game-attempts/:id", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT ga.*, u.email AS user_email, u.display_name AS user_name,
+              f.name AS festival_name, f.slug AS festival_slug,
+              a.name AS artist_name, a.difficulty AS artist_difficulty
+       FROM game_attempts ga
+       JOIN users u ON u.id = ga.user_id
+       JOIN festivals f ON f.id = ga.festival_id
+       JOIN artists a ON a.id = ga.artist_id
+       WHERE ga.id = $1`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Game not found" });
+    const game = rows[0];
+    game.transcript = game.questions_json ? JSON.parse(game.questions_json) : null;
+    delete game.questions_json;
+    res.json(game);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

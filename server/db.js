@@ -115,6 +115,31 @@ async function initSchema() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    -- Permanent, immutable per-game record — one row per artist attempt,
+    -- kept forever (unlike pending_attempts, which is just ephemeral
+    -- in-progress state and gets deleted once an attempt resolves). Shares
+    -- its id with the pending_attempts row that spawned it, so the same
+    -- number shown to the player as "Game #123" during play is exactly
+    -- what admin looks up later — for stats, for a customer dispute
+    -- ("I answered that right"), for anything that needs to reconstruct
+    -- exactly what happened in one specific game.
+    CREATE TABLE IF NOT EXISTS game_attempts (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      festival_id INTEGER NOT NULL REFERENCES festivals(id),
+      artist_id INTEGER NOT NULL REFERENCES artists(id),
+      tokens_spent INTEGER NOT NULL,
+      question_count INTEGER NOT NULL,
+      pass_threshold INTEGER NOT NULL,
+      correct_count INTEGER,
+      status TEXT NOT NULL DEFAULT 'in_progress', -- in_progress | passed | dead | abandoned
+      questions_json TEXT, -- full Q&A + per-question correctness, filled in at resolution
+      started_at TIMESTAMPTZ DEFAULT NOW(),
+      resolved_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS idx_game_attempts_user ON game_attempts (user_id);
+    CREATE INDEX IF NOT EXISTS idx_game_attempts_festival ON game_attempts (festival_id);
+
     CREATE TABLE IF NOT EXISTS tickets_won (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id),

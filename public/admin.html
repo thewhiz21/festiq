@@ -137,6 +137,7 @@
     <button data-tab="analytics" onclick="switchTab('analytics')">Analytics</button>
     <button data-tab="global-artists" onclick="switchTab('global-artists')">Artist DB</button>
     <button data-tab="traffic" onclick="switchTab('traffic')">Traffic</button>
+    <button data-tab="game-log" onclick="switchTab('game-log')">Game Log</button>
     <button data-tab="settings" onclick="switchTab('settings')">Settings</button>
   </nav>
 
@@ -329,6 +330,30 @@
       </div>
     </div>
 
+    <!-- GAME LOG -->
+    <div class="tab" id="tab-game-log">
+      <div class="card">
+        <h2>Game log <small>every artist attempt, permanent — for stats, discrepancies, and support lookups</small></h2>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;">
+          <input id="gl-id" placeholder="Game # (exact)" oninput="loadGameLog()" />
+          <input id="gl-email" placeholder="Player email contains…" oninput="loadGameLog()" />
+          <select id="gl-status" onchange="loadGameLog()">
+            <option value="">All statuses</option>
+            <option value="in_progress">In progress</option>
+            <option value="passed">Passed</option>
+            <option value="dead">Dead</option>
+            <option value="abandoned">Abandoned</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Game #</th><th>Player</th><th>Festival</th><th>Artist</th><th>Status</th><th>Score</th><th>Tokens</th><th>Started</th><th>Actions</th></tr></thead>
+            <tbody id="gameLogBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- SETTINGS -->
     <div class="tab" id="tab-settings">
       <div class="card">
@@ -426,6 +451,7 @@ function switchTab(name){
   if(name==='analytics') loadAnalytics();
   if(name==='global-artists') loadGlobalArtists();
   if(name==='traffic') loadTraffic();
+  if(name==='game-log') loadGameLog();
   if(name==='settings') loadSettings();
 }
 
@@ -998,6 +1024,56 @@ function loadTraffic(){
     document.getElementById('trafficReferrersBody').innerHTML = d.top_referrers.length ? d.top_referrers.map(r=>`
       <tr><td>${esc(r.referrer_host)}</td><td>${esc(SOURCE_LABELS[r.source_type] || r.source_type)}</td><td>${r.views}</td></tr>
     `).join('') : `<tr><td colspan="3" class="empty">No external referrers yet.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
+}
+
+// ── Game Log ──
+const GL_STATUS_PILL = { passed: 'pill-yes', dead: 'pill-no', abandoned: 'pill-upcoming', in_progress: 'pill-live' };
+function loadGameLog(){
+  const params = new URLSearchParams();
+  const id = document.getElementById('gl-id').value.trim();
+  const email = document.getElementById('gl-email').value.trim();
+  const status = document.getElementById('gl-status').value;
+  if (id) params.set('id', id);
+  if (email) params.set('user_email', email);
+  if (status) params.set('status', status);
+  api(`/api/admin/game-attempts?${params.toString()}`).then(list=>{
+    document.getElementById('gameLogBody').innerHTML = list.length ? list.map(g=>`
+      <tr>
+        <td>#${g.id}</td>
+        <td>${esc(g.user_name)} <span style="color:var(--txt2)">(${esc(g.user_email)})</span></td>
+        <td>${esc(g.festival_name)}</td>
+        <td>${esc(g.artist_name)} <span style="color:var(--txt2)">(${esc(g.artist_difficulty)})</span></td>
+        <td><span class="pill ${GL_STATUS_PILL[g.status]||''}">${esc(g.status)}</span></td>
+        <td>${g.correct_count !== null ? `${g.correct_count}/${g.question_count} (need ${g.pass_threshold})` : '—'}</td>
+        <td>${g.tokens_spent}</td>
+        <td>${new Date(g.started_at).toLocaleString()}</td>
+        <td class="actions"><button class="btn-sm" onclick="viewGameDetail(${g.id})">View</button></td>
+      </tr>
+    `).join('') : `<tr><td colspan="9" class="empty">No games match.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
+}
+
+function viewGameDetail(id){
+  api(`/api/admin/game-attempts/${id}`).then(g=>{
+    const transcriptRows = g.transcript ? g.transcript.items.map((item,i)=>`
+      <tr>
+        <td>${i+1}</td>
+        <td>${esc(item.question)}</td>
+        <td>${item.answered ? (item.wasCorrect ? '✅ Correct' : '❌ Wrong') : '⏳ Unanswered (timed out)'}</td>
+      </tr>
+    `).join('') : '';
+    document.getElementById('modalBody').innerHTML = `
+      <h3>Game #${g.id}</h3>
+      <p style="font-size:11px;color:var(--txt2);margin-bottom:12px;">
+        ${esc(g.user_name)} (${esc(g.user_email)}) · ${esc(g.festival_name)} · ${esc(g.artist_name)} (${esc(g.artist_difficulty)})<br>
+        Status: <b>${esc(g.status)}</b> ${g.correct_count !== null ? `· Score ${g.correct_count}/${g.question_count} (needed ${g.pass_threshold})` : ''} · ${g.tokens_spent} token${g.tokens_spent===1?'':'s'} spent<br>
+        Started ${new Date(g.started_at).toLocaleString()}${g.resolved_at ? ` · Resolved ${new Date(g.resolved_at).toLocaleString()}` : ''}
+      </p>
+      ${transcriptRows ? `<div class="table-wrap"><table><thead><tr><th>#</th><th>Question</th><th>Result</th></tr></thead><tbody>${transcriptRows}</tbody></table></div>` : '<div class="empty">No transcript yet — this game never finished (still in progress or abandoned before submitting).</div>'}
+      <div class="modal-actions"><button onclick="closeModal()">Close</button></div>
+    `;
+    document.getElementById('modalOverlay').classList.add('active');
   }).catch(e=>toast(e.message, true));
 }
 
