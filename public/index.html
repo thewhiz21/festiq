@@ -203,11 +203,14 @@
   @keyframes breathe{0%,100%{box-shadow:0 0 0 1px var(--box-accent,var(--border2)),0 0 0 rgba(0,0,0,0);}50%{box-shadow:0 0 0 1px var(--box-accent,var(--border2)),0 0 16px 1px var(--box-glow,rgba(162,48,234,0.18));}}
   @keyframes stampIn{0%{transform:scale(2.2) rotate(-14deg);opacity:0;}60%{transform:scale(0.92) rotate(-4deg);opacity:1;}100%{transform:scale(1) rotate(-8deg);opacity:1;}}
   @keyframes deadShake{0%,100%{transform:translateX(0);}20%{transform:translateX(-3px) rotate(-1deg);}40%{transform:translateX(3px) rotate(1deg);}60%{transform:translateX(-2px);}80%{transform:translateX(2px);}}
+  @keyframes clearedPop{0%{transform:scale(1);}35%{transform:scale(1.08);}60%{transform:scale(0.97);}100%{transform:scale(1);}}
+  @keyframes clearedGlow{0%,100%{box-shadow:0 0 0 2px var(--green),0 0 14px rgba(0,230,150,0.45);}50%{box-shadow:0 0 0 2px var(--green),0 0 24px rgba(0,230,150,0.7);}}
   .artist-box{position:relative;aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6px;cursor:pointer;transition:border-color .15s,transform .15s,opacity .2s,filter .2s,box-shadow .2s;background:linear-gradient(160deg,#fff 0%,var(--box-tint,var(--bg2)) 130%);border:2px solid var(--box-accent,var(--border2));overflow:hidden;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both,breathe 2.8s ease-in-out infinite;}
   .artist-box::before{content:'';position:absolute;top:0;left:0;right:0;height:5px;background:var(--box-accent,var(--purple));opacity:0.9;}
   .artist-box:hover{transform:translateY(-4px) scale(1.04) rotate(-1deg);box-shadow:0 12px 22px rgba(20,10,40,0.16);}
-  .artist-box.cleared{background:linear-gradient(160deg,rgba(0,255,179,0.2),rgba(0,255,179,0.05));border-color:var(--green);cursor:default;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both;}
-  .artist-box.cleared::before{background:var(--green);opacity:1;}
+  .artist-box.cleared{background:linear-gradient(160deg,rgba(0,230,150,0.55) 0%,rgba(0,230,150,0.28) 100%);border-color:var(--green);border-width:3px;cursor:default;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1),clearedPop .5s cubic-bezier(0.34,1.56,0.64,1) both,clearedGlow 2.4s ease-in-out infinite;}
+  .artist-box.cleared::before{background:var(--green);opacity:1;height:7px;}
+  .artist-box.cleared .logo-badge{background:var(--green)!important;box-shadow:0 3px 10px rgba(0,180,120,0.4),0 0 0 3px #fff;}
   .artist-box.dead{background:repeating-linear-gradient(135deg,rgba(255,51,85,0.12),rgba(255,51,85,0.12) 6px,rgba(255,51,85,0.04) 6px,rgba(255,51,85,0.04) 12px);border-color:var(--red);cursor:default;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both,deadShake .4s ease-in-out 1;filter:grayscale(0.55);}
   .artist-box.dead::before{background:var(--red);opacity:1;}
   .artist-box.inline{box-shadow:0 0 0 2px var(--gold),0 0 18px rgba(255,213,79,0.35)!important;border-color:var(--gold)!important;animation:cardIn .45s cubic-bezier(0.16,1,0.3,1) both;}
@@ -228,13 +231,15 @@
   .artist-box .logo-badge{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:12px;color:#fff;margin-bottom:4px;background:var(--box-accent,var(--purple));box-shadow:0 3px 8px rgba(20,10,40,0.22),0 0 0 3px #fff;flex-shrink:0;}
   .artist-box.dead .logo-badge{filter:grayscale(1);opacity:0.6;}
   .artist-box .status-stamp{position:absolute;top:4px;right:4px;font-size:15px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.2));}
-  .artist-box.cleared .status-stamp{animation:stampIn .4s cubic-bezier(0.16,1,0.3,1) both;}
+  .artist-box.cleared .status-stamp{animation:stampIn .4s cubic-bezier(0.16,1,0.3,1) both;font-size:20px;top:3px;right:3px;background:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,150,100,0.4);}
   .artist-box.dead .status-stamp{animation:stampIn .4s cubic-bezier(0.16,1,0.3,1) both;}
   .artist-box .name{font-family:var(--display);font-size:11.5px;font-weight:700;line-height:1.15;}
   .artist-box.dead .name{text-decoration:line-through;color:var(--txt2);}
   .artist-box .genre{font-size:8px;color:var(--txt2);margin-top:2px;}
   .artist-box .tagline{margin-top:3px;font-size:7.5px;font-weight:800;letter-spacing:0.05em;color:var(--txt2);padding:1px 6px;border-radius:10px;}
-  .artist-box.cleared .tagline{color:var(--green);background:rgba(0,255,179,0.14);}
+  .artist-box.cleared .tagline{color:#fff;background:var(--green);font-weight:900;}
+  .artist-box.cleared .name{color:#0a3d2c;}
+  .artist-box.cleared .genre{color:#0a3d2ca0;}
   .artist-box.dead .tagline{color:var(--red);background:rgba(255,51,85,0.12);}
   .board-legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:10.5px;color:var(--txt2);font-weight:600;}
   .board-legend span{display:inline-flex;align-items:center;gap:5px;}
@@ -1273,6 +1278,8 @@ function renderFestival(slug){
     const linesCompleted = f.board ? f.board.lines_completed : 0;
     const maxTiers = f.board ? f.board.max_tiers : 2;
     const clearedCount = cells.filter(c => c.status === 'cleared').length;
+    const boardBusted = !!(f.board && f.board.busted);
+    const boardOver = !!(f.board && f.board.board_over);
 
     app.innerHTML = `
       <a href="/" onclick="return handleFestivalLinkClick(event,'/')" class="backlink">← ALL FESTIVALS</a>
@@ -1287,6 +1294,7 @@ function renderFestival(slug){
       ${!isLive ? `<div class="banner-block" style="background:rgba(20,10,40,0.05);border:2px dashed var(--border2);color:var(--txt2);">🔒 UPCOMING — this board is locked for preview. Come back closer to ${f.event_date || 'the event'} to play it for real.</div>` : ''}
 
       ${isLive && linesCompleted >= 1 ? `<div class="banner-block banner-gold">🎉 You've won ${linesCompleted} ticket${linesCompleted === 1 ? '' : 's'} on this board! ${linesCompleted < maxTiers ? 'Keep going for another line.' : 'Max tickets reached — board complete.'}</div>` : ''}
+      ${isLive && boardBusted ? `<div class="banner-block" style="background:rgba(255,92,92,0.08);border:2px solid var(--red);color:var(--red);">💥 GAME OVER — every remaining line already has a dead square in it, so no line can ever be completed on this board. No tokens will be spent on the last few squares.</div>` : ''}
 
       ${isLive ? `
       <div class="wallet-panel">
@@ -1337,7 +1345,7 @@ function renderFestival(slug){
       }
     }
 
-    renderBoardGrid(cells, f.grid_size, !isLive);
+    renderBoardGrid(cells, f.grid_size, !isLive, boardOver);
     runDemo();
     fillTokenPackGrid('festival-token-preview-grid', false);
   });
@@ -1366,8 +1374,9 @@ function artistAccent(name){
 // already has its lineup entered) with no click/hover interaction and a
 // grayed, muted look instead of the lively "available" treatment — a
 // preview of the room, not a playable one yet.
-function renderBoardGrid(cells, gridSize, locked){
+function renderBoardGrid(cells, gridSize, locked, boardOver){
   const grid = document.getElementById('board-grid');
+  const effectiveLocked = locked || boardOver;
   const sorted = [...cells].sort((a,b) => a.position - b.position);
   grid.innerHTML = sorted.map((c, i) => {
     // Lineup not announced yet — a dashed "mystery box" placeholder instead
@@ -1385,15 +1394,21 @@ function renderBoardGrid(cells, gridSize, locked){
     }
     const { accent, glow, tint } = artistAccent(c.name);
     const stamp = c.status === 'cleared' ? '✅' : c.status === 'dead' ? '💀' : '';
-    const handlers = locked ? '' : `onmouseenter="hoverLine(${c.position}, ${gridSize})" onmouseleave="clearHoverLine()" onclick="handleBoxClick(${c.artist_id}, '${c.status}')"`;
+    const handlers = effectiveLocked ? '' : `onmouseenter="hoverLine(${c.position}, ${gridSize})" onmouseleave="clearHoverLine()" onclick="handleBoxClick(${c.artist_id}, '${c.status}')"`;
+    let tagline;
+    if (boardOver && c.status === 'available') tagline = '⛔ GAME OVER';
+    else if (locked) tagline = '🔒 LOCKED';
+    else if (c.status === 'cleared') tagline = 'CLEARED';
+    else if (c.status === 'dead') tagline = 'DEAD — NO RETRY';
+    else tagline = 'PLAY →';
     return `
-    <div class="artist-box ${c.status} ${locked ? 'locked' : ''}" data-pos="${c.position}" style="--box-accent:${locked ? 'var(--txt3)' : accent};--box-glow:${glow};--box-tint:${tint};animation-delay:${Math.min(i * 35, 400)}ms;"
+    <div class="artist-box ${c.status} ${effectiveLocked ? 'locked' : ''}" data-pos="${c.position}" style="--box-accent:${effectiveLocked ? 'var(--txt3)' : accent};--box-glow:${glow};--box-tint:${tint};animation-delay:${Math.min(i * 35, 400)}ms;"
          ${handlers}>
       ${stamp ? `<div class="status-stamp">${stamp}</div>` : ''}
-      <div class="logo-badge" style="background:${locked || c.status === 'dead' ? 'var(--txt3)' : accent};">${artistInitials(c.name)}</div>
+      <div class="logo-badge" style="background:${effectiveLocked || c.status === 'dead' ? 'var(--txt3)' : accent};">${artistInitials(c.name)}</div>
       <div class="name">${c.name}</div>
       <div class="genre">${c.genre || ''}</div>
-      <div class="tagline">${locked ? '🔒 LOCKED' : c.status === 'cleared' ? 'CLEARED' : c.status === 'dead' ? 'DEAD — NO RETRY' : 'PLAY →'}</div>
+      <div class="tagline">${tagline}</div>
     </div>
   `;
   }).join('');

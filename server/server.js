@@ -419,11 +419,24 @@ function suggestEntryCostTokens(avgGaPriceCents, artistCount) {
 
 function boardPayload(festival, artists, cells, gridSize, wonTicket, linesCompleted) {
   const cellByArtist = Object.fromEntries(cells.map((c) => [c.artist_id, c.status]));
+  // Same math /start already uses to refuse a play on a dead board — but
+  // that only fires the moment someone taps a square. Without also exposing
+  // it here, a fully-busted board (every line already has a dead square in
+  // it) just sits there looking like a couple of squares are still
+  // meaningfully playable, with nothing telling the visitor the game is
+  // actually over until they tap one and get a generic error.
+  const cellsByPositionForEval = artists
+    .slice()
+    .sort((a, b) => a.position - b.position)
+    .map((a) => ({ status: cellByArtist[a.id] || "available" }));
+  const evalState = evaluateBoard(cellsByPositionForEval, gridSize);
   return {
     grid_size: gridSize,
     won_ticket: !!wonTicket,
     lines_completed: linesCompleted || 0,
     max_tiers: MAX_TIERS,
+    busted: evalState.busted,
+    board_over: evalState.busted || evalState.completedLines >= MAX_TIERS || (evalState.completedLines >= 1 && !evalState.nextLineReachable),
     cells: artists.map((a) => ({
       artist_id: a.id,
       name: a.name,
