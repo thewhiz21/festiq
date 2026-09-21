@@ -7,6 +7,54 @@ const crypto = require("crypto");
 const { pool, initSchema } = require("./db");
 const { gridSizeForArtistCount, evaluateBoard, MAX_TIERS } = require("./board");
 const { seed } = require("./seed");
+const { generateAndVerifyQuestions, TARGET_BANK_SIZE } = require("./question_gen");
+
+// Lazily reserves this board generation's question set for EVERY artist in
+// the festival at once, the first time any square is started on a fresh
+// board (generation is unset/0 on a new board, bumped on every Try Again
+// reset) — not re-rolled on each /start call. Each artist's draw excludes
+// whatever was reserved for it last generation so a reset hands the player
+// a genuinely fresh set instead of the same questions they just saw,
+// cycling back into the full bank only once it's too small to keep
+// excluding from. See board_question_sets in db.js.
+async function ensureBoardQuestionSets(board, artists) {
+  const { rows: existing } = await pool.query(
+    `SELECT 1 FROM board_question_sets WHERE board_id = $1 AND generation = $2 LIMIT 1`,
+    [board.id, board.generation || 0]
+  );
+  if (existing.length) return; // already reserved for this generation
+
+  const { rows: prevRows } = await pool.query(
+    `SELECT artist_id, question_ids FROM board_question_sets WHERE board_id = $1 AND generation = $2`,
+    [board.id, Math.max(0, (board.generation || 0) - 1)]
+  );
+  const prevByArtist = new Map(prevRows.map((r) => [r.artist_id, r.question_ids || []]));
+  const QUESTIONS_PER_QUIZ = 7;
+
+  for (const artist of artists) {
+    const { rows: bank } = await pool.query(
+      `SELECT id FROM questions WHERE artist_id = $1 AND verification_status != 'rejected'`,
+      [artist.id]
+    );
+    if (!bank.length) continue; // /start will surface a clear "no questions yet" error for this artist
+
+    const excluded = new Set(prevByArtist.get(artist.id) || []);
+    let candidatePool = bank.filter((q) => !excluded.has(q.id));
+    if (candidatePool.length < QUESTIONS_PER_QUIZ) candidatePool = bank; // bank too shallow to fully exclude — allow some repeats rather than fail
+
+    for (let i = candidatePool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidatePool[i], candidatePool[j]] = [candidatePool[j], candidatePool[i]];
+    }
+    const picked = candidatePool.slice(0, QUESTIONS_PER_QUIZ).map((q) => q.id);
+
+    await pool.query(
+      `INSERT INTO board_question_sets (board_id, artist_id, generation, question_ids) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (board_id, artist_id, generation) DO NOTHING`,
+      [board.id, artist.id, board.generation || 0, picked]
+    );
+  }
+}
 
 // ─── In-board pace curve ────────────────────────────────────────────────────
 // The clock tightens as you work your way across ONE bingo card: your first
@@ -817,18 +865,30 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
       return res.status(402).json({ error: `Not enough tokens — need ${totalCost}${breakdown}. Buy more or claim your free daily token` });
     }
 
-    const { rows: allQuestions } = await pool.query(`SELECT * FROM questions WHERE artist_id = $1`, [artist.id]);
-    if (!allQuestions.length) return res.status(500).json({ error: "No questions available for this artist yet" });
+    // Reserve this board generation's question set for the whole lineup (a
+    // no-op after the first square of this generation is started), then
+    // read back just this artist's reserved set — a fixed pool chosen once
+    // per generation rather than re-rolled from the full bank on every
+    // /start call, so resets actually rotate the questions instead of
+    // handing the player the same bank back every time.
+    const { rows: lineupArtists } = await pool.query(`SELECT * FROM artists WHERE festival_id = $1`, [festival.id]);
+    await ensureBoardQuestionSets(board, lineupArtists);
+    const { rows: reservedRows } = await pool.query(
+      `SELECT question_ids FROM board_question_sets WHERE board_id = $1 AND artist_id = $2 AND generation = $3`,
+      [board.id, artist.id, board.generation || 0]
+    );
+    const reservedIds = reservedRows[0]?.question_ids || [];
+    if (!reservedIds.length) return res.status(500).json({ error: "No questions available for this artist yet" });
 
-    // Shuffle question order too, then cap at QUESTIONS_PER_QUIZ — keeps every
-    // quiz the same short length even if an artist's bank grows past 7.
+    const { rows: allQuestions } = await pool.query(`SELECT * FROM questions WHERE id = ANY($1)`, [reservedIds]);
     const QUESTIONS_PER_QUIZ = 7;
-    const shuffledQuestionOrder = [...allQuestions];
-    for (let i = shuffledQuestionOrder.length - 1; i > 0; i--) {
+    // Reserved set is already the quiz-sized draw — just randomize the
+    // on-screen order each attempt.
+    const questions = [...allQuestions];
+    for (let i = questions.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [shuffledQuestionOrder[i], shuffledQuestionOrder[j]] = [shuffledQuestionOrder[j], shuffledQuestionOrder[i]];
+      [questions[i], questions[j]] = [questions[j], questions[i]];
     }
-    const questions = shuffledQuestionOrder.slice(0, QUESTIONS_PER_QUIZ);
 
     // Shuffle choice order per question so the correct answer isn't always "A".
     const shuffled = questions.map((q) => {
@@ -1338,6 +1398,82 @@ app.delete("/api/admin/questions/:id", requireAdmin, async (req, res) => {
     const { rowCount } = await pool.query(`DELETE FROM questions WHERE id = $1`, [req.params.id]);
     if (!rowCount) return res.status(404).json({ error: "Question not found" });
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Per-artist "top up the bank" button. Drafts with Claude, cross-checks each
+// candidate with two independent blind judges (Claude + GPT), and only
+// auto-approves a question into the live bank when both judges land on the
+// drafted answer AND both call it the artist's assigned difficulty tier.
+// Everything else lands in the review queue below instead of going live.
+app.post("/api/admin/artists/:id/generate-questions", requireAdmin, async (req, res) => {
+  try {
+    const { rows: artistRows } = await pool.query(`SELECT * FROM artists WHERE id = $1`, [req.params.id]);
+    const artist = artistRows[0];
+    if (!artist) return res.status(404).json({ error: "Artist not found" });
+    const { rows: festivalRows } = await pool.query(`SELECT * FROM festivals WHERE id = $1`, [artist.festival_id]);
+    const festival = festivalRows[0];
+
+    const requestedCount = Number(req.body.count);
+    const count = Number.isFinite(requestedCount) && requestedCount > 0 ? Math.min(requestedCount, 60) : 10;
+
+    const result = await generateAndVerifyQuestions(pool, artist, festival, count);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Bank size targets by difficulty (see question_gen.js) — purely a UI hint
+// for admin's "top up to target" button, never used to change pass rates.
+app.get("/api/admin/question-bank-targets", requireAdmin, (req, res) => {
+  res.json(TARGET_BANK_SIZE);
+});
+
+// Everything an AI draft didn't get unanimous sign-off on, across every
+// artist — the human backstop before a generated question can ever reach a
+// real, ticket-stakes game.
+app.get("/api/admin/questions/review-queue", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT q.*, a.name AS artist_name, a.difficulty AS artist_difficulty, f.name AS festival_name
+      FROM questions q
+      JOIN artists a ON a.id = q.artist_id
+      JOIN festivals f ON f.id = a.festival_id
+      WHERE q.verification_status = 'needs_review'
+      ORDER BY q.created_at ASC
+    `);
+    res.json(rows.map((r) => ({ ...r, review_notes: r.review_notes ? JSON.parse(r.review_notes) : null })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/questions/:id/approve", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE questions SET verification_status = 'human' WHERE id = $1 RETURNING *`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Question not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/questions/:id/reject", requireAdmin, async (req, res) => {
+  try {
+    // Kept (not deleted) with status 'rejected' — excluded from every board
+    // draw (see ensureBoardQuestionSets) but still around for audit trail.
+    const { rows } = await pool.query(
+      `UPDATE questions SET verification_status = 'rejected' WHERE id = $1 RETURNING *`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Question not found" });
+    res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

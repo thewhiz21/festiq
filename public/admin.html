@@ -133,6 +133,7 @@
     <button data-tab="dashboard" class="active" onclick="switchTab('dashboard')">Dashboard</button>
     <button data-tab="festivals" onclick="switchTab('festivals')">Festivals</button>
     <button data-tab="lineup" onclick="switchTab('lineup')">Lineup &amp; Trivia</button>
+    <button data-tab="review-queue" onclick="switchTab('review-queue')">Review Queue<span id="reviewQueueBadge"></span></button>
     <button data-tab="users" onclick="switchTab('users')">Users</button>
     <button data-tab="tickets" onclick="switchTab('tickets')">Tickets</button>
     <button data-tab="token-packs" onclick="switchTab('token-packs')">Token Packs</button>
@@ -191,6 +192,19 @@
           <table>
             <thead><tr><th>Question</th><th>A</th><th>B</th><th>C</th><th>D</th><th>Correct</th><th>Actions</th></tr></thead>
             <tbody id="questionsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- REVIEW QUEUE -->
+    <div class="tab" id="tab-review-queue">
+      <div class="card">
+        <h2>AI question review queue <small style="font-weight:400;color:#8a8398;">Generated questions land here whenever Claude and GPT didn't independently agree on the answer or the difficulty tier — nothing here is playable until you approve it.</small></h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Artist</th><th>Question</th><th>Choices</th><th>Drafted answer</th><th>Claude says</th><th>GPT says</th><th>Actions</th></tr></thead>
+            <tbody id="reviewQueueBody"></tbody>
           </table>
         </div>
       </div>
@@ -447,6 +461,7 @@ function switchTab(name){
   if(name==='dashboard') loadDashboard();
   if(name==='festivals') loadFestivals();
   if(name==='lineup') loadLineupFestivalOptions();
+  if(name==='review-queue') loadReviewQueue();
   if(name==='users') loadUsers();
   if(name==='tickets') loadTickets();
   if(name==='token-packs') loadPacks();
@@ -457,7 +472,43 @@ function switchTab(name){
   if(name==='settings') loadSettings();
 }
 
-function boot(){ loadDashboard(); }
+function boot(){ loadDashboard(); refreshReviewQueueBadge(); }
+
+// ── AI question review queue ──
+function refreshReviewQueueBadge(){
+  api('/api/admin/questions/review-queue').then(list=>{
+    document.getElementById('reviewQueueBadge').textContent = list.length ? ` (${list.length})` : '';
+  }).catch(()=>{});
+}
+
+function loadReviewQueue(){
+  api('/api/admin/questions/review-queue').then(list=>{
+    document.getElementById('reviewQueueBadge').textContent = list.length ? ` (${list.length})` : '';
+    document.getElementById('reviewQueueBody').innerHTML = list.length ? list.map(q=>{
+      const notes = q.review_notes || {};
+      const fmt = v => v ? `${esc(v.answer||'?')} / ${esc(v.difficulty||'?')}` : '—';
+      return `
+      <tr>
+        <td>${esc(q.artist_name)} <small style="color:#8a8398;">(${esc(q.artist_difficulty)})</small></td>
+        <td>${esc(q.question_text)}</td>
+        <td><small>A) ${esc(q.choice_a)}<br/>B) ${esc(q.choice_b)}<br/>C) ${esc(q.choice_c)}<br/>D) ${esc(q.choice_d)}</small></td>
+        <td>${esc((q.correct_choice||'').toUpperCase())}</td>
+        <td>${fmt(notes.claude)}</td>
+        <td>${fmt(notes.gpt)}</td>
+        <td class="actions">
+          <button class="btn-blue btn-sm" onclick="reviewDecision(${q.id}, 'approve')">Approve</button>
+          <button class="btn-red btn-sm" onclick="reviewDecision(${q.id}, 'reject')">Reject</button>
+        </td>
+      </tr>
+    `}).join('') : `<tr><td colspan="7" class="empty">Nothing waiting on review right now.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
+}
+
+function reviewDecision(id, action){
+  api(`/api/admin/questions/${id}/${action}`, { method:'POST' })
+    .then(()=>{ toast(action==='approve' ? 'Approved — now live in the bank' : 'Rejected'); loadReviewQueue(); })
+    .catch(e=>toast(e.message, true));
+}
 
 // ── Dashboard ──
 function loadDashboard(){
@@ -598,7 +649,7 @@ function loadLineup(festivalId){
         <td>${a.target_pass_rate != null ? a.target_pass_rate + '%' : '—'}</td>
         <td>${a.question_count}</td>
         <td class="actions">
-          <button class="btn-sm" onclick="loadQuestions(${a.id}, '${escAttr(a.name)}')">Questions</button>
+          <button class="btn-sm" onclick="loadQuestions(${a.id}, '${escAttr(a.name)}', '${a.difficulty}')">Questions</button>
           <button class="btn-sm" onclick='openArtistModal(${JSON.stringify(a)})'>Edit</button>
           <button class="btn-red btn-sm" onclick="deleteArtist(${a.id}, '${escAttr(a.name)}')">Delete</button>
         </td>
@@ -664,14 +715,29 @@ function deleteArtist(id, name){
 }
 
 // ── Questions ──
-function loadQuestions(artistId, name){
+let currentArtistDifficulty = 'medium';
+let questionBankTargets = { easy: 20, medium: 30, hard: 45 };
+
+function loadQuestions(artistId, name, difficulty){
   currentArtistId = artistId;
+  currentArtistDifficulty = difficulty || 'medium';
   document.getElementById('questionsCard').style.display = 'block';
-  document.getElementById('questionsTitle').innerHTML = `Trivia questions — ${esc(name)} <button class="btn-blue btn-sm" onclick="openQuestionModal()">+ Add question</button>`;
+  api('/api/admin/question-bank-targets').then(t=>{ questionBankTargets = t; }).catch(()=>{});
+  renderQuestionsList(artistId, name);
+}
+
+function renderQuestionsList(artistId, name){
   api(`/api/admin/artists/${artistId}/questions`).then(list=>{
+    const target = questionBankTargets[currentArtistDifficulty] || 30;
+    const badge = { human:'human', auto_approved:'AI ✓', needs_review:'needs review', rejected:'rejected' };
+    document.getElementById('questionsTitle').innerHTML = `
+      Trivia questions — ${esc(name)} <small style="font-weight:400;color:#8a8398;">${list.length} in bank (target ${target} for '${esc(currentArtistDifficulty)}')</small>
+      <button class="btn-blue btn-sm" onclick="openQuestionModal()">+ Add question</button>
+      <button class="btn-blue btn-sm" onclick="generateMoreQuestions(${artistId}, '${escAttr(name)}', ${target})">🤖 Generate more</button>
+    `;
     document.getElementById('questionsBody').innerHTML = list.length ? list.map(q=>`
       <tr>
-        <td>${esc(q.question_text)}</td>
+        <td>${esc(q.question_text)} <br/><small style="color:#8a8398;">${badge[q.verification_status] || q.verification_status || 'human'}</small></td>
         <td>${esc(q.choice_a)}</td><td>${esc(q.choice_b)}</td><td>${esc(q.choice_c)}</td><td>${esc(q.choice_d)}</td>
         <td>${esc(q.correct_choice)}</td>
         <td class="actions">
@@ -680,6 +746,24 @@ function loadQuestions(artistId, name){
         </td>
       </tr>
     `).join('') : `<tr><td colspan="7" class="empty">No questions yet for this artist.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
+}
+
+function generateMoreQuestions(artistId, name, target){
+  api(`/api/admin/artists/${artistId}/questions`).then(list=>{
+    const suggested = Math.max(5, target - list.length);
+    const countStr = prompt(`How many new questions should we draft for ${name}? (Claude drafts, then Claude + GPT independently verify each one before it goes live — disagreements land in the Review Queue instead.)`, suggested);
+    if(!countStr) return;
+    const count = Number(countStr);
+    if(!Number.isFinite(count) || count <= 0) return;
+    toast(`Drafting ${count} question(s) for ${name}… this can take a minute`);
+    api(`/api/admin/artists/${artistId}/generate-questions`, { method:'POST', body: JSON.stringify({ count }) })
+      .then(r=>{
+        toast(`${r.auto_approved} approved automatically, ${r.needs_review} sent to Review Queue`);
+        renderQuestionsList(artistId, name);
+        refreshReviewQueueBadge();
+      })
+      .catch(e=>toast(e.message, true));
   }).catch(e=>toast(e.message, true));
 }
 
@@ -719,12 +803,12 @@ function saveQuestion(id){
   };
   const req = id ? api(`/api/admin/questions/${id}`, { method:'PUT', body: JSON.stringify(body) })
                  : api(`/api/admin/artists/${currentArtistId}/questions`, { method:'POST', body: JSON.stringify(body) });
-  req.then(()=>{ closeModal(); toast('Saved'); loadQuestions(currentArtistId, ''); }).catch(e=>toast(e.message, true));
+  req.then(()=>{ closeModal(); toast('Saved'); renderQuestionsList(currentArtistId, ''); }).catch(e=>toast(e.message, true));
 }
 
 function deleteQuestion(id){
   if(!confirm('Delete this question?')) return;
-  api(`/api/admin/questions/${id}`, { method:'DELETE' }).then(()=>{ toast('Deleted'); loadQuestions(currentArtistId, ''); }).catch(e=>toast(e.message, true));
+  api(`/api/admin/questions/${id}`, { method:'DELETE' }).then(()=>{ toast('Deleted'); renderQuestionsList(currentArtistId, ''); }).catch(e=>toast(e.message, true));
 }
 
 // ── Users ──

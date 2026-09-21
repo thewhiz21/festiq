@@ -75,8 +75,31 @@ async function initSchema() {
       choice_b TEXT NOT NULL,
       choice_c TEXT NOT NULL,
       choice_d TEXT NOT NULL,
-      correct_choice TEXT NOT NULL
+      correct_choice TEXT NOT NULL,
+      -- Provenance for AI-generated questions (NULL/'human' for hand-written
+      -- ones like the seed data). drafted_by/verified_by name which models
+      -- were involved; verification_status gates whether a question is
+      -- actually playable (see server/question_gen.js). estimated_difficulty
+      -- is what the two verifying models judged the question to be, checked
+      -- against this artist's assigned difficulty tier — a mismatch is a
+      -- reason to hold a question for review even if both models agree on
+      -- the correct answer, since bank size must never be the thing that
+      -- quietly changes how easy an artist's square actually is.
+      drafted_by TEXT,
+      verified_by TEXT,
+      verification_status TEXT NOT NULL DEFAULT 'human', -- human | auto_approved | needs_review | rejected
+      estimated_difficulty TEXT,
+      review_notes TEXT, -- JSON: both verifying models' answer + difficulty verdicts, for the admin review queue
+      source_note TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS drafted_by TEXT;
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS verified_by TEXT;
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS verification_status TEXT NOT NULL DEFAULT 'human';
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS estimated_difficulty TEXT;
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS review_notes TEXT;
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS source_note TEXT;
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 
     -- One board per user per festival. Resets only if the admin resets the
     -- festival (e.g. after tickets are awarded / a new lineup posts).
@@ -101,6 +124,23 @@ async function initSchema() {
     -- call for a board — never re-charged on a reset, since a reset is the
     -- same board getting a fresh card, not a new entry.
     ALTER TABLE boards ADD COLUMN IF NOT EXISTS entry_fee_charged BOOLEAN NOT NULL DEFAULT FALSE;
+
+    -- Which questions were actually drawn for a given board generation, per
+    -- artist. Reserved once, lazily, the first time any square is started
+    -- on a fresh board (see ensureBoardQuestionSets in server.js) — not
+    -- re-rolled on every /start call — so a Try Again reset (which bumps
+    -- boards.generation) always pulls a fresh set per artist, deliberately
+    -- excluding whatever was used last generation, rather than every reset
+    -- handing the player back the exact same questions they already saw.
+    CREATE TABLE IF NOT EXISTS board_question_sets (
+      board_id INTEGER NOT NULL REFERENCES boards(id),
+      artist_id INTEGER NOT NULL REFERENCES artists(id),
+      generation INTEGER NOT NULL,
+      question_ids INTEGER[] NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (board_id, artist_id, generation)
+    );
+
     ALTER TABLE festivals ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'live';
     -- Reference average general-admission ticket price for this show, in
     -- cents. When set, token pricing is derived from it (see
