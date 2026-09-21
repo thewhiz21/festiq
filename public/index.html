@@ -1470,6 +1470,20 @@ function handleBoxClick(artistId, status){
   openConfirmPlayModal(artistId, cell);
 }
 
+// A real ticket-stub shape (notched sides, dashed perforation) with the
+// count printed directly on it — used wherever a token cost needs to read
+// as "a ticket", instead of stapling an emoji next to a number.
+function ticketBadgeHTML(n, opts){
+  const o = opts || {};
+  const w = o.width || 40, h = o.height || 26;
+  return `<svg width="${w}" height="${h}" viewBox="0 0 40 26" style="display:block;color:${o.color || 'currentColor'};flex-shrink:0;">
+    <path d="M3,4 H37 a3,3 0 0 1 0,6 a2.4,2.4 0 0 0 0,6 a3,3 0 0 1 0,6 H3 a3,3 0 0 1 0,-6 a2.4,2.4 0 0 0 0,-6 a3,3 0 0 1 0,-6 Z"
+      fill="currentColor" fill-opacity="0.16" stroke="currentColor" stroke-width="1.4"/>
+    <line x1="27" y1="6" x2="27" y2="20" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2.2,2.2" opacity="0.55"/>
+    <text x="15" y="17.5" font-family="inherit" font-size="12" font-weight="800" text-anchor="middle" fill="currentColor">${n}</text>
+  </svg>`;
+}
+
 function openConfirmPlayModal(artistId, cell){
   const seconds = DIFFICULTY_SECONDS_PREVIEW[cell?.difficulty] || DIFFICULTY_SECONDS_PREVIEW.medium;
   const totalSeconds = QUESTIONS_PER_QUIZ_PREVIEW * seconds;
@@ -1480,8 +1494,8 @@ function openConfirmPlayModal(artistId, cell){
     <p class="sub">One shot — answer wrong and this square is dead for your board, no retry.</p>
     <div style="display:flex;flex-direction:column;gap:8px;margin:16px 0;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg2);border-radius:8px;">
-        <span style="font-size:11.5px;color:var(--txt2);">🎟️ Cost</span>
-        <span style="font-weight:800;">${cost} token${cost === 1 ? '' : 's'}</span>
+        <span style="font-size:11.5px;color:var(--txt2);">Cost</span>
+        <span style="color:var(--gold);">${ticketBadgeHTML(cost)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg2);border-radius:8px;">
         <span style="font-size:11.5px;color:var(--txt2);">❓ Questions</span>
@@ -1494,7 +1508,7 @@ function openConfirmPlayModal(artistId, cell){
     </div>
     <div style="display:flex;gap:10px;">
       <button class="btn" style="flex:1;" onclick="closeModal('confirm-play-modal')">CANCEL</button>
-      <button class="btn btn-purple" style="flex:1;" onclick="confirmAndStartQuiz(${artistId})">CONFIRM — SPEND ${cost} 🎟️</button>
+      <button class="btn btn-purple" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="confirmAndStartQuiz(${artistId})">CONFIRM ${ticketBadgeHTML(cost, {width:32, height:21})}</button>
     </div>
   `;
   document.getElementById('confirm-play-modal').classList.add('open');
