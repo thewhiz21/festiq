@@ -8,22 +8,22 @@ const { pool, initSchema } = require("./db");
 const { gridSizeForArtistCount, evaluateBoard, MAX_TIERS } = require("./board");
 const { seed } = require("./seed");
 
-// ─── Retry-escalation curve ─────────────────────────────────────────────────
-// A player who busts (or finishes with no line left reachable) can reset for
-// a brand-new board — same idea as an arcade machine letting you drop
-// another quarter in. But a free reset at the SAME odds forever would be a
-// real economic hole: someone could just keep resetting a busted board at
-// the easiest settings until they eventually clear a line and win a ticket.
-// So every reset bumps the board's `generation`, and each generation shaves
-// the clock: first board gets a generous 18s/question (plenty of time even
-// for a name you have to think about), then 16s, 14s, and 12s from the 4th
-// board on — still very winnable if you actually know the lineup, just no
-// longer a leisurely guess. This is independent of an artist's own
-// difficulty tier (which still sets the pass bar via DIFFICULTY_LEVEL below)
-// — generation is board-wide time pressure, difficulty is per-artist
-// question toughness, and together they're what keeps "clear a line, win a
-// real ticket" from being something we can get run over on.
-const GEN_SECONDS = [18, 16, 14, 12];
+// ─── In-board pace curve ────────────────────────────────────────────────────
+// The clock tightens as you work your way across ONE bingo card: your first
+// pick on a fresh board gets a generous 18s/question (plenty of time even
+// for a name you have to think about), your second pick gets 16s, third
+// 14s, and 12s from the 4th square on for the rest of that board — still
+// very winnable if you actually know the lineup, just no longer a leisurely
+// guess by the time you're going for a full line. This is independent of an
+// artist's own difficulty tier (which still sets the pass bar via
+// DIFFICULTY_LEVEL below) — pace is about how far into THIS board you are,
+// difficulty is about which specific artist you picked. A brand-new board
+// (a fresh account, or a reset via POST /reset after busting) always starts
+// back at the top of the curve, since it's indexed purely by how many
+// squares on the CURRENT board are already resolved (cleared or dead) —
+// resetting a board sets every square back to available, which naturally
+// resets this to square one too.
+const BOARD_PACE_SECONDS = [18, 16, 14, 12];
 
 const app = express();
 app.use(cors());
@@ -447,13 +447,17 @@ function boardPayload(festival, artists, cells, gridSize, wonTicket, linesComple
     .sort((a, b) => a.position - b.position)
     .map((a) => ({ status: cellByArtist[a.id] || "available" }));
   const evalState = evaluateBoard(cellsByPositionForEval, gridSize);
+  // How far into the pace curve the NEXT square you tap would land — same
+  // count /start itself uses, exposed here so the confirm-play modal can
+  // show an accurate time preview before it ever calls /start.
+  const resolvedCount = cellsByPositionForEval.filter((c) => c.status !== "available").length;
   return {
     grid_size: gridSize,
     won_ticket: !!wonTicket,
     lines_completed: linesCompleted || 0,
     max_tiers: MAX_TIERS,
     generation: generation || 0,
-    next_generation_seconds: GEN_SECONDS[Math.min((generation || 0) + 1, GEN_SECONDS.length - 1)],
+    next_square_seconds: BOARD_PACE_SECONDS[Math.min(resolvedCount, BOARD_PACE_SECONDS.length - 1)],
     busted: evalState.busted,
     board_over: evalState.busted || evalState.completedLines >= MAX_TIERS || (evalState.completedLines >= 1 && !evalState.nextLineReachable),
     cells: artists.map((a) => ({
@@ -827,8 +831,9 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
     // genuinely harder questions — same idea as PropQuix Solo's per-box
     // tiers, just mapped onto artist difficulty instead of board position.
     // This is the ACCURACY side of difficulty (how many you must get right);
-    // the TIME side is handled separately by GEN_SECONDS below, since it
-    // escalates with board retries rather than with the artist itself.
+    // the TIME side is handled separately by BOARD_PACE_SECONDS below, since
+    // it escalates with how far into THIS board you are, not with which
+    // artist you picked.
     const DIFFICULTY_LEVEL = {
       easy: { estPassRatePct: 55, passThreshold: 7 },
       medium: { estPassRatePct: 40, passThreshold: 6 },
@@ -836,8 +841,11 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
     };
     const level = DIFFICULTY_LEVEL[artist.difficulty] || DIFFICULTY_LEVEL.medium;
     const passThreshold = Math.min(level.passThreshold, shuffled.length);
-    const boardGeneration = board.generation || 0;
-    const secondsPerQuestion = GEN_SECONDS[Math.min(boardGeneration, GEN_SECONDS.length - 1)];
+    // How many squares on THIS board are already resolved (cleared or dead)
+    // — 0 for your very first pick, climbing from there. A board reset sets
+    // every square back to available, which naturally resets this to 0 too.
+    const squaresPlayedSoFar = cells.filter((c) => c.status !== "available").length;
+    const secondsPerQuestion = BOARD_PACE_SECONDS[Math.min(squaresPlayedSoFar, BOARD_PACE_SECONDS.length - 1)];
     const inserted = await pool.query(
       `INSERT INTO pending_attempts (user_id, festival_id, artist_id, questions_json) VALUES ($1, $2, $3, $4) RETURNING id`,
       [req.user.id, festival.id, artist.id, JSON.stringify({ items: shuffled, passThreshold })]
@@ -848,8 +856,8 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
     // for stats or a support dispute. See db.js for why it's a separate
     // table from pending_attempts rather than just not deleting that one.
     await pool.query(
-      `INSERT INTO game_attempts (id, user_id, festival_id, artist_id, tokens_spent, question_count, pass_threshold, seconds_per_question, board_generation, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'in_progress')`,
-      [attemptId, req.user.id, festival.id, artist.id, festival.entry_cost_tokens, shuffled.length, passThreshold, secondsPerQuestion, boardGeneration]
+      `INSERT INTO game_attempts (id, user_id, festival_id, artist_id, tokens_spent, question_count, pass_threshold, seconds_per_question, board_generation, squares_played_before, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'in_progress')`,
+      [attemptId, req.user.id, festival.id, artist.id, festival.entry_cost_tokens, shuffled.length, passThreshold, secondsPerQuestion, board.generation || 0, squaresPlayedSoFar]
     );
 
     const updatedWallet = await getOrCreateWallet(req.user.id);
@@ -858,7 +866,7 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
       artist: { id: artist.id, name: artist.name, genre: artist.genre, difficulty: artist.difficulty },
       pass_threshold: passThreshold,
       level: { ...level, secondsPerQuestion },
-      board_generation: boardGeneration,
+      squares_played_before: squaresPlayedSoFar,
       questions: shuffled.map((q) => ({ question: q.question, choices: q.choices.map((c) => c.text) })),
       tokens_remaining: updatedWallet.tokens,
     });
@@ -999,10 +1007,16 @@ app.post("/api/festivals/:slug/submit", requireAuth, async (req, res) => {
 // A dead or fully-resolved board gets to start clean rather than sitting
 // there unplayable — same "drop another quarter in" idea as an arcade
 // machine. Only allowed once the current board actually has nowhere left to
-// go (see the same board_over math used everywhere else); every reset bumps
-// `generation`, which is what tightens the clock via GEN_SECONDS above. The
-// lifetime ticket cap in /submit (not lines_completed, which this zeroes)
-// is what actually stops a reset loop from farming unlimited tickets.
+// go (see the same board_over math used everywhere else). Every square goes
+// back to available, which — since BOARD_PACE_SECONDS is indexed by how
+// many squares on the CURRENT board are resolved — also puts the clock back
+// at the start of the curve (18s) for this fresh board; resetting isn't
+// meant to punish you further, it's meant to give you a clean new card.
+// `generation` still ticks up purely as a reset counter (handy for admin/
+// support — "this board's been reset 4 times"), it just no longer feeds the
+// pace curve. The lifetime ticket cap in /submit (not lines_completed,
+// which this zeroes) is what actually stops a reset loop from farming
+// unlimited tickets.
 app.post("/api/festivals/:slug/reset", requireAuth, async (req, res) => {
   try {
     const { rows: fRows } = await pool.query(`SELECT * FROM festivals WHERE slug = $1`, [req.params.slug]);

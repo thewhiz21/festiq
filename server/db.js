@@ -137,7 +137,8 @@ async function initSchema() {
       question_count INTEGER NOT NULL,
       pass_threshold INTEGER NOT NULL,
       seconds_per_question INTEGER,
-      board_generation INTEGER NOT NULL DEFAULT 0,
+      board_generation INTEGER NOT NULL DEFAULT 0, -- how many times this board had been reset
+      squares_played_before INTEGER NOT NULL DEFAULT 0, -- squares already resolved on THIS board — what actually set seconds_per_question
       correct_count INTEGER,
       status TEXT NOT NULL DEFAULT 'in_progress', -- in_progress | passed | dead | abandoned
       questions_json TEXT, -- full Q&A + per-question correctness, filled in at resolution
@@ -146,6 +147,7 @@ async function initSchema() {
     );
     ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS seconds_per_question INTEGER;
     ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS board_generation INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS squares_played_before INTEGER NOT NULL DEFAULT 0;
     CREATE INDEX IF NOT EXISTS idx_game_attempts_user ON game_attempts (user_id);
     CREATE INDEX IF NOT EXISTS idx_game_attempts_festival ON game_attempts (festival_id);
 
