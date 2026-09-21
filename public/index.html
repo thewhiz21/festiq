@@ -120,6 +120,10 @@
   .token-badge{position:relative;z-index:2;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:linear-gradient(160deg,#ffe066,#ff9d00);border:2px solid rgba(255,255,255,0.85);box-shadow:0 2px 8px rgba(0,0,0,0.3);color:#4a2e00;line-height:1;}
   .token-badge .tb-num{font-size:13px;font-weight:800;}
   .token-badge .tb-lbl{font-size:6px;letter-spacing:0.03em;text-transform:uppercase;font-weight:700;}
+  /* A range like "1–3" doesn't fit a 40px circle the way a single digit
+     does — widen into a pill instead of clipping. */
+  .token-badge.is-range{width:auto;min-width:44px;padding:0 6px;border-radius:16px;}
+  .token-badge.is-range .tb-num{font-size:11px;}
   /* City skyline silhouette, tinted to a natural darker shade of whatever
      accent color the banner gradient is using via multiply blending — no
      per-festival artwork needed, it just reads as dusk-over-the-skyline. */
@@ -252,6 +256,7 @@
   .artist-box .logo-badge{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:12px;color:#fff;margin-bottom:4px;background:var(--box-accent,var(--purple));box-shadow:0 3px 8px rgba(20,10,40,0.22),0 0 0 3px #fff;flex-shrink:0;}
   .artist-box.dead .logo-badge{background:var(--red)!important;box-shadow:0 3px 10px rgba(180,0,40,0.4),0 0 0 3px #fff;filter:none;opacity:1;}
   .artist-box .status-stamp{position:absolute;top:4px;right:4px;font-size:15px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.2));}
+  .artist-box .tile-cost-badge{position:absolute;top:4px;left:4px;font-size:10px;font-weight:800;background:rgba(255,255,255,0.92);color:var(--txt);padding:2px 6px;border-radius:10px;box-shadow:0 1px 4px rgba(20,10,40,0.18);}
   .artist-box.cleared .status-stamp{animation:stampIn .4s cubic-bezier(0.16,1,0.3,1) both;font-size:20px;top:3px;right:3px;background:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,150,100,0.4);}
   .artist-box.dead .status-stamp{animation:stampIn .4s cubic-bezier(0.16,1,0.3,1) both;font-size:20px;top:3px;right:3px;background:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(180,0,40,0.4);}
   .artist-box .name{font-family:var(--display);font-size:11.5px;font-weight:700;line-height:1.15;}
@@ -939,6 +944,14 @@ function parseFestivalDate(raw){
   return Infinity;
 }
 
+// Every artist has its own token_cost now (a headliner can be priced higher
+// than a deep cut) rather than one flat per-festival number, so anywhere we
+// used to show a single "N tokens" figure now shows a range.
+function formatTokenRange(min, max){
+  const lo = min ?? 1, hi = max ?? 1;
+  return lo === hi ? String(lo) : `${lo}–${hi}`;
+}
+
 // Autosort used everywhere we list festivals: live boards float to the top
 // (playable right now beats a countdown), then soonest-date first within
 // each group — live and upcoming.
@@ -988,7 +1001,8 @@ function renderList(){
         : soldOut
           ? `<span class="tag tag-won">Tickets Claimed</span>`
           : `<span class="tag tag-live"><span class="lg-livedot"></span>Live</span>`;
-      const tokenBadgeHTML = `<span class="token-badge" title="${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per try"><span class="tb-num">${f.entry_cost_tokens}</span><span class="tb-lbl">Token${f.entry_cost_tokens === 1 ? '' : 's'}</span></span>`;
+      const tokRange = formatTokenRange(f.token_cost_min, f.token_cost_max);
+      const tokenBadgeHTML = `<span class="token-badge ${f.token_cost_min !== f.token_cost_max ? 'is-range' : ''}" title="${tokRange} per try, depending on the artist${f.board_entry_fee_tokens ? ` + ${f.board_entry_fee_tokens} one-time board entry` : ''}"><span class="tb-num">${tokRange}</span><span class="tb-lbl">Token${f.token_cost_max === 1 ? '' : 's'}</span></span>`;
       return `
       <a class="festival-card ${!isLive ? 'is-upcoming' : ''}" href="/festival/${f.slug}"
          onclick="return handleFestivalLinkClick(event,'/festival/${f.slug}')"
@@ -1075,8 +1089,8 @@ function renderPricing(){
       <a class="price-card" href="/festival/${f.slug}" onclick="return handleFestivalLinkClick(event,'/festival/${f.slug}')" style="text-decoration:none;color:inherit;--pc-accent:${acc};--pc-tint:${acc}14;">
         <h4>${f.name}</h4>
         <div class="pc-meta">${f.location || ''}${f.event_date ? ' · ' + f.event_date : ''}</div>
-        <div class="pc-price">🎟️ ${f.entry_cost_tokens} <small>token${f.entry_cost_tokens===1?'':'s'} / try</small></div>
-        <div class="pc-note">${f.lineup_count ? `${f.lineup_count} artists on the board` : 'Lineup drops soon'}</div>
+        <div class="pc-price">🎟️ ${formatTokenRange(f.token_cost_min, f.token_cost_max)} <small>token${f.token_cost_max===1?'':'s'} / try</small></div>
+        <div class="pc-note">${f.board_entry_fee_tokens ? `+ ${f.board_entry_fee_tokens} one-time board entry · ` : ''}${f.lineup_count ? `${f.lineup_count} artists on the board` : 'Lineup drops soon'}</div>
       </a>`;
     }).join('');
   });
@@ -1309,7 +1323,7 @@ function renderFestival(slug){
 
         ${tokenPricingPreviewHTML()}
 
-        <div class="footer-note">Once the lineup is announced, each square becomes a real artist you can challenge for ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} a try.</div>
+        <div class="footer-note">Once the lineup is announced, each square becomes a real artist you can challenge — token cost varies per artist, shown once the board fills in.</div>
       `;
       renderBoardGrid(pendingCells, f.grid_size, false);
       runDemo();
@@ -1321,6 +1335,9 @@ function renderFestival(slug){
     const maxTiers = f.board ? f.board.max_tiers : 2;
     const clearedCount = cells.filter(c => c.status === 'cleared').length;
     const boardOver = !!(f.board && f.board.board_over);
+    const tokenCosts = cells.map(c => c.token_cost ?? 1);
+    const tokRange = formatTokenRange(Math.min(...tokenCosts), Math.max(...tokenCosts));
+    const entryFeeNote = f.board_entry_fee_tokens ? ` + ${f.board_entry_fee_tokens} one-time board entry` : '';
 
     app.innerHTML = `
       <div class="festival-hero-bg" style="--sky-color:${f.banner_color};">
@@ -1344,7 +1361,7 @@ function renderFestival(slug){
         <div class="wp-stat"><span class="wp-icon">✅</span><div class="wp-val" style="color:var(--green);">${clearedCount}/${cells.length}</div><div class="wp-lbl">Cleared</div></div>
         <div class="wp-stat"><span class="wp-icon">🏆</span><div class="wp-val" style="color:var(--gold);">${linesCompleted}/${maxTiers}</div><div class="wp-lbl">Tickets Won</div></div>
       </div>
-      <div style="text-align:center;font-size:10px;color:var(--txt2);margin:-12px 0 16px;">🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens===1?'':'s'} per try — <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')" style="color:var(--purple);font-weight:700;">get tokens →</a></div>
+      <div style="text-align:center;font-size:10px;color:var(--txt2);margin:-12px 0 16px;">🎟️ ${tokRange} token${tokRange==='1'?'':'s'} per try, depending on the artist${entryFeeNote} — <a href="/pricing" onclick="return handleFestivalLinkClick(event,'/pricing')" style="color:var(--purple);font-weight:700;">get tokens →</a></div>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
         ${user ? `<button class="btn btn-gold" style="flex:1;min-width:180px;" onclick="claimFreeToken()">🎁 CLAIM FREE TOKEN</button>
@@ -1353,7 +1370,7 @@ function renderFestival(slug){
       </div>` : ''}
 
       <div style="font-size:10px;color:var(--txt2);letter-spacing:0.12em;font-weight:700;text-transform:uppercase;margin-bottom:12px;text-align:center;">
-        🎯 The Board — ${isLive ? 'hover a square to see how a line lights up' : `🎟️ ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist, one shot each · locked until live`}
+        🎯 The Board — ${isLive ? 'hover a square to see how a line lights up' : `🎟️ ${tokRange} token${tokRange==='1'?'':'s'} per artist, one shot each · locked until live`}
       </div>
       ${isLive ? `<div class="board-legend">
         <span><span class="lg-dot" style="background:var(--purple);"></span>${cells.filter(c => c.status === 'available').length} available — tap to play</span>
@@ -1376,7 +1393,7 @@ function renderFestival(slug){
 
       ${tokenPricingPreviewHTML()}
 
-      <div class="footer-note">${isLive ? `Entry costs ${f.entry_cost_tokens} token${f.entry_cost_tokens === 1 ? '' : 's'} per artist attempt. Fail and that artist is dead for this board — no retries.` : `This board opens for real attempts once FestiQ marks ${f.name} live.`}</div>
+      <div class="footer-note">${isLive ? `Entry costs ${tokRange} token${tokRange==='1'?'':'s'} per artist attempt, depending on the artist${entryFeeNote}. Fail and that artist is dead for this board — no retries.` : `This board opens for real attempts once FestiQ marks ${f.name} live.`}</div>
     `;
 
     if (isLive) {
@@ -1497,6 +1514,7 @@ function renderBoardGrid(cells, gridSize, locked, boardOver){
     <div class="artist-box ${c.status} ${effectiveLocked ? 'locked' : ''}" data-pos="${c.position}" style="--box-accent:${effectiveLocked ? 'var(--txt3)' : accent};--box-glow:${glow};--box-tint:${tint};animation-delay:${Math.min(i * 35, 400)}ms;"
          ${handlers}>
       ${stamp ? `<div class="status-stamp">${stamp}</div>` : ''}
+      ${!effectiveLocked && c.status === 'available' ? `<div class="tile-cost-badge">🎟️${c.token_cost ?? 1}</div>` : ''}
       <div class="logo-badge" style="background:${effectiveLocked || c.status === 'dead' ? 'var(--txt3)' : accent};">${artistInitials(c.name)}</div>
       <div class="name">${c.name}</div>
       <div class="genre">${c.genre || ''}</div>
@@ -1563,16 +1581,36 @@ function openConfirmPlayModal(artistId, cell){
   const seconds = BOARD_PACE_PREVIEW[Math.min(resolvedCount, BOARD_PACE_PREVIEW.length - 1)];
   const totalSeconds = QUESTIONS_PER_QUIZ_PREVIEW * seconds;
   const mm = Math.floor(totalSeconds / 60), ss = totalSeconds % 60;
-  const cost = currentFestival.entry_cost_tokens;
+  const artistCost = cell?.token_cost ?? 1;
+  // A one-time board entry fee (if this festival has one) is only actually
+  // owed the very first time this board is played — mirrors the server's
+  // own gate on boards.entry_fee_charged in /start.
+  const entryFeeCharged = !!(currentFestival.board && currentFestival.board.entry_fee_charged);
+  const entryFeeDue = !entryFeeCharged ? (currentFestival.board_entry_fee_tokens || 0) : 0;
+  const totalCost = artistCost + entryFeeDue;
   document.getElementById('confirm-play-modal-body').innerHTML = `
     <h3>🎤 ${cell?.name || 'This artist'}</h3>
     <p class="sub">One shot — answer wrong and this square is dead for your board, no retry.</p>
     ${resolvedCount > 0 ? `<p class="sub" style="color:var(--gold);font-weight:700;">⚡ Square ${resolvedCount + 1} on this board — the clock's a bit tighter than your first pick.</p>` : ''}
+    ${entryFeeDue ? `<p class="sub" style="color:var(--purple);font-weight:700;">🎪 First square on this board — includes a one-time ${entryFeeDue}-token board entry.</p>` : ''}
     <div style="display:flex;flex-direction:column;gap:8px;margin:16px 0;">
+      ${entryFeeDue ? `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg2);border-radius:8px;">
+        <span style="font-size:11.5px;color:var(--txt2);">🎪 Board entry (one-time)</span>
+        <span style="color:var(--purple);">${ticketBadgeHTML(entryFeeDue)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg2);border-radius:8px;">
+        <span style="font-size:11.5px;color:var(--txt2);">🎤 This square</span>
+        <span style="color:var(--gold);">${ticketBadgeHTML(artistCost)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg2);border-radius:8px;border:1.5px solid var(--gold);">
+        <span style="font-size:11.5px;font-weight:800;">Total</span>
+        <span style="color:var(--gold);">${ticketBadgeHTML(totalCost)}</span>
+      </div>` : `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg2);border-radius:8px;">
         <span style="font-size:11.5px;color:var(--txt2);">Cost</span>
-        <span style="color:var(--gold);">${ticketBadgeHTML(cost)}</span>
-      </div>
+        <span style="color:var(--gold);">${ticketBadgeHTML(artistCost)}</span>
+      </div>`}
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg2);border-radius:8px;">
         <span style="font-size:11.5px;color:var(--txt2);">❓ Questions</span>
         <span style="font-weight:800;">${QUESTIONS_PER_QUIZ_PREVIEW}</span>
@@ -1584,7 +1622,7 @@ function openConfirmPlayModal(artistId, cell){
     </div>
     <div style="display:flex;gap:10px;">
       <button class="btn" style="flex:1;" onclick="closeModal('confirm-play-modal')">CANCEL</button>
-      <button class="btn btn-purple" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="confirmAndStartQuiz(${artistId})">CONFIRM ${ticketBadgeHTML(cost, {width:32, height:21})}</button>
+      <button class="btn btn-purple" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;" onclick="confirmAndStartQuiz(${artistId})">CONFIRM ${ticketBadgeHTML(totalCost, {width:32, height:21})}</button>
     </div>
   `;
   document.getElementById('confirm-play-modal').classList.add('open');

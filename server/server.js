@@ -434,7 +434,7 @@ function suggestEntryCostTokens(avgGaPriceCents, artistCount) {
   return Math.max(1, Math.round(tokensForFullBoard / artistCount));
 }
 
-function boardPayload(festival, artists, cells, gridSize, wonTicket, linesCompleted, generation) {
+function boardPayload(festival, artists, cells, gridSize, wonTicket, linesCompleted, generation, entryFeeCharged) {
   const cellByArtist = Object.fromEntries(cells.map((c) => [c.artist_id, c.status]));
   // Same math /start already uses to refuse a play on a dead board — but
   // that only fires the moment someone taps a square. Without also exposing
@@ -458,6 +458,7 @@ function boardPayload(festival, artists, cells, gridSize, wonTicket, linesComple
     max_tiers: MAX_TIERS,
     generation: generation || 0,
     next_square_seconds: BOARD_PACE_SECONDS[Math.min(resolvedCount, BOARD_PACE_SECONDS.length - 1)],
+    entry_fee_charged: !!entryFeeCharged,
     busted: evalState.busted,
     board_over: evalState.busted || evalState.completedLines >= MAX_TIERS || (evalState.completedLines >= 1 && !evalState.nextLineReachable),
     cells: artists.map((a) => ({
@@ -466,6 +467,7 @@ function boardPayload(festival, artists, cells, gridSize, wonTicket, linesComple
       genre: a.genre,
       set_time: a.set_time,
       difficulty: a.difficulty,
+      token_cost: a.token_cost ?? 1,
       position: a.position,
       also_at: a.also_at || [],
       status: cellByArtist[a.id] || "available",
@@ -567,8 +569,11 @@ app.get("/api/festivals", async (req, res) => {
     const { rows: festivals } = await pool.query(`SELECT * FROM festivals ORDER BY event_date ASC`);
     const out = [];
     for (const f of festivals) {
-      const { rows: countRows } = await pool.query(`SELECT COUNT(*) AS c FROM artists WHERE festival_id = $1`, [f.id]);
-      const lineupCount = parseInt(countRows[0].c, 10);
+      const { rows: countRows } = await pool.query(
+        `SELECT COUNT(*)::int AS c, MIN(token_cost) AS min_cost, MAX(token_cost) AS max_cost FROM artists WHERE festival_id = $1`,
+        [f.id]
+      );
+      const lineupCount = countRows[0].c;
       out.push({
         slug: f.slug,
         name: f.name,
@@ -580,6 +585,9 @@ app.get("/api/festivals", async (req, res) => {
         tickets_available: f.tickets_available,
         tickets_awarded: f.tickets_awarded,
         entry_cost_tokens: f.entry_cost_tokens,
+        board_entry_fee_tokens: f.board_entry_fee_tokens || 0,
+        token_cost_min: countRows[0].min_cost ?? 1,
+        token_cost_max: countRows[0].max_cost ?? 1,
         avg_ga_price_usd_cents: f.avg_ga_price_usd_cents || null,
         lineup_count: lineupCount,
         is_spotlight: siteSettings.spotlight_festival_id === f.id,
@@ -636,7 +644,7 @@ app.get("/api/festivals/:slug", async (req, res) => {
       try {
         const decoded = jwt.verify(header.split(" ")[1], JWT_SECRET);
         const { board: b, cells } = await getOrCreateBoard(decoded.id, festival);
-        board = boardPayload(festival, artists, cells, gridSize, b.won_ticket, b.lines_completed, b.generation);
+        board = boardPayload(festival, artists, cells, gridSize, b.won_ticket, b.lines_completed, b.generation, b.entry_fee_charged);
       } catch {
         /* not logged in / bad token — just omit board */
       }
@@ -653,9 +661,10 @@ app.get("/api/festivals/:slug", async (req, res) => {
       tickets_available: festival.tickets_available,
       tickets_awarded: festival.tickets_awarded,
       entry_cost_tokens: festival.entry_cost_tokens,
+      board_entry_fee_tokens: festival.board_entry_fee_tokens || 0,
       avg_ga_price_usd_cents: festival.avg_ga_price_usd_cents || null,
       grid_size: gridSize,
-      artists: artists.map((a) => ({ id: a.id, name: a.name, genre: a.genre, set_time: a.set_time, position: a.position, difficulty: a.difficulty, also_at: a.also_at })),
+      artists: artists.map((a) => ({ id: a.id, name: a.name, genre: a.genre, set_time: a.set_time, position: a.position, difficulty: a.difficulty, token_cost: a.token_cost ?? 1, also_at: a.also_at })),
       board,
     });
   } catch (err) {
@@ -792,8 +801,21 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
       await pool.query(`UPDATE game_attempts SET status = 'abandoned', resolved_at = NOW() WHERE id = ANY($1) AND status = 'in_progress'`, [staleRows.map((r) => r.id)]);
     }
 
+    // What this attempt actually costs: the square's own token_cost, plus —
+    // only the very first time this board is played — the festival's
+    // one-time board_entry_fee_tokens (0 for most festivals). Gated on
+    // boards.entry_fee_charged rather than "does a board row exist yet",
+    // since a board row gets created just from viewing the festival page
+    // (see getOrCreateBoard) long before anyone spends a token on it.
+    const artistCost = artist.token_cost ?? 1;
+    const entryFeeDue = !board.entry_fee_charged && (festival.board_entry_fee_tokens || 0) > 0 ? festival.board_entry_fee_tokens : 0;
+    const totalCost = artistCost + entryFeeDue;
+
     const wallet = await getOrCreateWallet(req.user.id);
-    if (wallet.tokens < festival.entry_cost_tokens) return res.status(402).json({ error: "Not enough tokens — buy more or claim your free daily token" });
+    if (wallet.tokens < totalCost) {
+      const breakdown = entryFeeDue ? ` (${entryFeeDue} one-time board entry + ${artistCost} for this artist)` : "";
+      return res.status(402).json({ error: `Not enough tokens — need ${totalCost}${breakdown}. Buy more or claim your free daily token` });
+    }
 
     const { rows: allQuestions } = await pool.query(`SELECT * FROM questions WHERE artist_id = $1`, [artist.id]);
     if (!allQuestions.length) return res.status(500).json({ error: "No questions available for this artist yet" });
@@ -823,8 +845,11 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
       return { question: q.question_text, choices, answered: false, wasCorrect: null };
     });
 
-    // Deduct the token only after everything above succeeded.
-    await pool.query(`UPDATE wallets SET tokens = tokens - $1 WHERE user_id = $2`, [festival.entry_cost_tokens, req.user.id]);
+    // Deduct tokens only after everything above succeeded.
+    await pool.query(`UPDATE wallets SET tokens = tokens - $1 WHERE user_id = $2`, [totalCost, req.user.id]);
+    if (entryFeeDue) {
+      await pool.query(`UPDATE boards SET entry_fee_charged = TRUE WHERE id = $1`, [board.id]);
+    }
 
     // Short (7-question) rounds with a difficulty-tuned pass bar: easy needs a
     // near-perfect score, medium/hard ease the bar slightly to offset
@@ -856,13 +881,14 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
     // for stats or a support dispute. See db.js for why it's a separate
     // table from pending_attempts rather than just not deleting that one.
     await pool.query(
-      `INSERT INTO game_attempts (id, user_id, festival_id, artist_id, tokens_spent, question_count, pass_threshold, seconds_per_question, board_generation, squares_played_before, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'in_progress')`,
-      [attemptId, req.user.id, festival.id, artist.id, festival.entry_cost_tokens, shuffled.length, passThreshold, secondsPerQuestion, board.generation || 0, squaresPlayedSoFar]
+      `INSERT INTO game_attempts (id, user_id, festival_id, artist_id, tokens_spent, entry_fee_portion, question_count, pass_threshold, seconds_per_question, board_generation, squares_played_before, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'in_progress')`,
+      [attemptId, req.user.id, festival.id, artist.id, totalCost, entryFeeDue, shuffled.length, passThreshold, secondsPerQuestion, board.generation || 0, squaresPlayedSoFar]
     );
 
     const updatedWallet = await getOrCreateWallet(req.user.id);
     res.json({
       attempt_id: attemptId,
+      cost_breakdown: { artist_cost: artistCost, entry_fee: entryFeeDue, total: totalCost },
       artist: { id: artist.id, name: artist.name, genre: artist.genre, difficulty: artist.difficulty },
       pass_threshold: passThreshold,
       level: { ...level, secondsPerQuestion },
@@ -997,7 +1023,7 @@ app.post("/api/festivals/:slug/submit", requireAuth, async (req, res) => {
       tickets_won: ticketsWon,
       // back-compat: first ticket won this call, if any
       ticket_won: ticketsWon[0] || null,
-      board: boardPayload(festival, artists, freshCells, gridSize, completedLines >= 1, Math.max(completedLines, previousLines), board.generation),
+      board: boardPayload(festival, artists, freshCells, gridSize, completedLines >= 1, Math.max(completedLines, previousLines), board.generation, board.entry_fee_charged),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1037,7 +1063,7 @@ app.post("/api/festivals/:slug/reset", requireAuth, async (req, res) => {
     await pool.query(`UPDATE boards SET lines_completed = 0, won_ticket = FALSE, generation = $1 WHERE id = $2`, [nextGeneration, board.id]);
 
     const { rows: freshCells } = await pool.query(`SELECT * FROM board_cells WHERE board_id = $1`, [board.id]);
-    res.json({ board: boardPayload(festival, artists, freshCells, gridSize, false, 0, nextGeneration) });
+    res.json({ board: boardPayload(festival, artists, freshCells, gridSize, false, 0, nextGeneration, board.entry_fee_charged) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1143,11 +1169,11 @@ app.get("/api/admin/festivals", requireAdmin, async (req, res) => {
 
 app.post("/api/admin/festivals", requireAdmin, async (req, res) => {
   try {
-    const { slug, name, location, event_date, banner_color, entry_cost_tokens, ticket_prize_label, status, tickets_available, avg_ga_price_usd_cents } = req.body;
+    const { slug, name, location, event_date, banner_color, entry_cost_tokens, board_entry_fee_tokens, ticket_prize_label, status, tickets_available, avg_ga_price_usd_cents } = req.body;
     if (!slug || !name) return res.status(400).json({ error: "slug and name are required" });
     const { rows } = await pool.query(
-      `INSERT INTO festivals (slug, name, location, event_date, banner_color, entry_cost_tokens, ticket_prize_label, status, tickets_available, avg_ga_price_usd_cents)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      `INSERT INTO festivals (slug, name, location, event_date, banner_color, entry_cost_tokens, board_entry_fee_tokens, ticket_prize_label, status, tickets_available, avg_ga_price_usd_cents)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
       [
         slug.trim(),
         name.trim(),
@@ -1155,6 +1181,7 @@ app.post("/api/admin/festivals", requireAdmin, async (req, res) => {
         event_date || null,
         banner_color || "#ff3d81",
         entry_cost_tokens ?? 1,
+        board_entry_fee_tokens ?? 0,
         ticket_prize_label || "1 General Admission Ticket",
         status || "upcoming",
         tickets_available ?? 0,
@@ -1170,7 +1197,7 @@ app.post("/api/admin/festivals", requireAdmin, async (req, res) => {
 
 app.put("/api/admin/festivals/:id", requireAdmin, async (req, res) => {
   try {
-    const fields = ["slug", "name", "location", "event_date", "banner_color", "entry_cost_tokens", "ticket_prize_label", "status", "tickets_available", "tickets_awarded", "avg_ga_price_usd_cents"];
+    const fields = ["slug", "name", "location", "event_date", "banner_color", "entry_cost_tokens", "board_entry_fee_tokens", "ticket_prize_label", "status", "tickets_available", "tickets_awarded", "avg_ga_price_usd_cents"];
     const updates = fields.filter((f) => req.body[f] !== undefined);
     if (!updates.length) return res.status(400).json({ error: "No fields to update" });
     const setClause = updates.map((f, i) => `${f} = $${i + 2}`).join(", ");
@@ -1221,11 +1248,11 @@ app.get("/api/admin/festivals/:id/artists", requireAdmin, async (req, res) => {
 
 app.post("/api/admin/festivals/:id/artists", requireAdmin, async (req, res) => {
   try {
-    const { name, genre, set_time, position, difficulty } = req.body;
+    const { name, genre, set_time, position, difficulty, token_cost, target_pass_rate } = req.body;
     if (!name) return res.status(400).json({ error: "name is required" });
     const { rows } = await pool.query(
-      `INSERT INTO artists (festival_id, name, genre, set_time, position, difficulty) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [req.params.id, name.trim(), genre || null, set_time || null, position ?? 0, difficulty || "medium"]
+      `INSERT INTO artists (festival_id, name, genre, set_time, position, difficulty, token_cost, target_pass_rate) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [req.params.id, name.trim(), genre || null, set_time || null, position ?? 0, difficulty || "medium", token_cost ?? 1, target_pass_rate ?? null]
     );
     res.json(rows[0]);
   } catch (err) {
@@ -1235,7 +1262,7 @@ app.post("/api/admin/festivals/:id/artists", requireAdmin, async (req, res) => {
 
 app.put("/api/admin/artists/:id", requireAdmin, async (req, res) => {
   try {
-    const fields = ["name", "genre", "set_time", "position", "difficulty"];
+    const fields = ["name", "genre", "set_time", "position", "difficulty", "token_cost", "target_pass_rate"];
     const updates = fields.filter((f) => req.body[f] !== undefined);
     if (!updates.length) return res.status(400).json({ error: "No fields to update" });
     const setClause = updates.map((f, i) => `${f} = $${i + 2}`).join(", ");

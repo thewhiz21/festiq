@@ -48,8 +48,24 @@ async function initSchema() {
       genre TEXT,
       set_time TEXT,
       position INTEGER NOT NULL,
-      difficulty TEXT NOT NULL DEFAULT 'medium'
+      difficulty TEXT NOT NULL DEFAULT 'medium',
+      -- How many tokens ONE attempt at this specific square costs. Separate
+      -- from difficulty on purpose: difficulty is how hard the trivia
+      -- actually is (drives the pass bar), token_cost is what the market
+      -- will bear for a shot at this artist (drives revenue) — a headliner
+      -- can be priced high because of demand even if it isn't the hardest
+      -- square on the board, and vice versa. Replaces the old flat
+      -- per-festival festivals.entry_cost_tokens as the actual charge.
+      token_cost INTEGER NOT NULL DEFAULT 1,
+      -- Admin's intended clearance rate for this square (0-100, nullable).
+      -- Not yet wired to auto-tune anything — it's the target half of a
+      -- target-vs-actual comparison once there's real play data; question
+      -- count, pass threshold, and timer are what admin tunes by hand to
+      -- try to hit it.
+      target_pass_rate INTEGER
     );
+    ALTER TABLE artists ADD COLUMN IF NOT EXISTS token_cost INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE artists ADD COLUMN IF NOT EXISTS target_pass_rate INTEGER;
 
     CREATE TABLE IF NOT EXISTS questions (
       id SERIAL PRIMARY KEY,
@@ -75,10 +91,16 @@ async function initSchema() {
     );
     ALTER TABLE boards ADD COLUMN IF NOT EXISTS lines_completed INTEGER NOT NULL DEFAULT 0;
     -- Bumped every time a player resets a dead/done board for a fresh one
-    -- (see POST /reset in server.js). Drives the escalating time-pressure
-    -- curve in GEN_SECONDS — each fresh board is a bit faster than the last,
-    -- so free retries can't just be farmed at the easiest settings forever.
+    -- (see POST /reset in server.js) — purely a "how many times has this
+    -- board been reset" counter for admin/support now; it no longer drives
+    -- the pace curve (see BOARD_PACE_SECONDS in server.js, which is keyed
+    -- off how many squares on the CURRENT board are resolved instead).
     ALTER TABLE boards ADD COLUMN IF NOT EXISTS generation INTEGER NOT NULL DEFAULT 0;
+    -- Whether the one-time board_entry_fee_tokens (see festivals below) has
+    -- already been charged for this board. Set once, on the first /start
+    -- call for a board — never re-charged on a reset, since a reset is the
+    -- same board getting a fresh card, not a new entry.
+    ALTER TABLE boards ADD COLUMN IF NOT EXISTS entry_fee_charged BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE festivals ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'live';
     -- Reference average general-admission ticket price for this show, in
     -- cents. When set, token pricing is derived from it (see
@@ -86,6 +108,12 @@ async function initSchema() {
     -- token_price_usd_cents column, so the cost of playing always tracks
     -- what the actual show costs to get into.
     ALTER TABLE festivals ADD COLUMN IF NOT EXISTS avg_ga_price_usd_cents INTEGER;
+    -- One-time cost (in tokens) to enter this festival's board at all, on
+    -- top of whatever each individual square then costs to attempt. 0 (the
+    -- default) means no separate entry fee — existing festivals are
+    -- unaffected. Charged once per user per festival, the first time they
+    -- start a quiz on that board; never re-charged on a board reset.
+    ALTER TABLE festivals ADD COLUMN IF NOT EXISTS board_entry_fee_tokens INTEGER NOT NULL DEFAULT 0;
 
     -- Canonical cross-festival artist registry. Multiple festivals' "artists"
     -- rows (one lineup slot each) can point at the same global_artists row
@@ -133,7 +161,8 @@ async function initSchema() {
       user_id INTEGER NOT NULL REFERENCES users(id),
       festival_id INTEGER NOT NULL REFERENCES festivals(id),
       artist_id INTEGER NOT NULL REFERENCES artists(id),
-      tokens_spent INTEGER NOT NULL,
+      tokens_spent INTEGER NOT NULL, -- total charged for this attempt, including any entry_fee_portion below
+      entry_fee_portion INTEGER NOT NULL DEFAULT 0, -- how much of tokens_spent was the one-time board entry fee (0 unless this was the attempt that triggered it)
       question_count INTEGER NOT NULL,
       pass_threshold INTEGER NOT NULL,
       seconds_per_question INTEGER,
@@ -148,6 +177,7 @@ async function initSchema() {
     ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS seconds_per_question INTEGER;
     ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS board_generation INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS squares_played_before INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS entry_fee_portion INTEGER NOT NULL DEFAULT 0;
     CREATE INDEX IF NOT EXISTS idx_game_attempts_user ON game_attempts (user_id);
     CREATE INDEX IF NOT EXISTS idx_game_attempts_festival ON game_attempts (festival_id);
 
