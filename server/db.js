@@ -74,6 +74,11 @@ async function initSchema() {
       UNIQUE(user_id, festival_id)
     );
     ALTER TABLE boards ADD COLUMN IF NOT EXISTS lines_completed INTEGER NOT NULL DEFAULT 0;
+    -- Bumped every time a player resets a dead/done board for a fresh one
+    -- (see POST /reset in server.js). Drives the escalating time-pressure
+    -- curve in GEN_SECONDS — each fresh board is a bit faster than the last,
+    -- so free retries can't just be farmed at the easiest settings forever.
+    ALTER TABLE boards ADD COLUMN IF NOT EXISTS generation INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE festivals ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'live';
     -- Reference average general-admission ticket price for this show, in
     -- cents. When set, token pricing is derived from it (see
@@ -131,12 +136,16 @@ async function initSchema() {
       tokens_spent INTEGER NOT NULL,
       question_count INTEGER NOT NULL,
       pass_threshold INTEGER NOT NULL,
+      seconds_per_question INTEGER,
+      board_generation INTEGER NOT NULL DEFAULT 0,
       correct_count INTEGER,
       status TEXT NOT NULL DEFAULT 'in_progress', -- in_progress | passed | dead | abandoned
       questions_json TEXT, -- full Q&A + per-question correctness, filled in at resolution
       started_at TIMESTAMPTZ DEFAULT NOW(),
       resolved_at TIMESTAMPTZ
     );
+    ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS seconds_per_question INTEGER;
+    ALTER TABLE game_attempts ADD COLUMN IF NOT EXISTS board_generation INTEGER NOT NULL DEFAULT 0;
     CREATE INDEX IF NOT EXISTS idx_game_attempts_user ON game_attempts (user_id);
     CREATE INDEX IF NOT EXISTS idx_game_attempts_festival ON game_attempts (festival_id);
 

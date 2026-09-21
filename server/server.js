@@ -8,6 +8,23 @@ const { pool, initSchema } = require("./db");
 const { gridSizeForArtistCount, evaluateBoard, MAX_TIERS } = require("./board");
 const { seed } = require("./seed");
 
+// ─── Retry-escalation curve ─────────────────────────────────────────────────
+// A player who busts (or finishes with no line left reachable) can reset for
+// a brand-new board — same idea as an arcade machine letting you drop
+// another quarter in. But a free reset at the SAME odds forever would be a
+// real economic hole: someone could just keep resetting a busted board at
+// the easiest settings until they eventually clear a line and win a ticket.
+// So every reset bumps the board's `generation`, and each generation shaves
+// the clock: first board gets a generous 18s/question (plenty of time even
+// for a name you have to think about), then 16s, 14s, and 12s from the 4th
+// board on — still very winnable if you actually know the lineup, just no
+// longer a leisurely guess. This is independent of an artist's own
+// difficulty tier (which still sets the pass bar via DIFFICULTY_LEVEL below)
+// — generation is board-wide time pressure, difficulty is per-artist
+// question toughness, and together they're what keeps "clear a line, win a
+// real ticket" from being something we can get run over on.
+const GEN_SECONDS = [18, 16, 14, 12];
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -417,7 +434,7 @@ function suggestEntryCostTokens(avgGaPriceCents, artistCount) {
   return Math.max(1, Math.round(tokensForFullBoard / artistCount));
 }
 
-function boardPayload(festival, artists, cells, gridSize, wonTicket, linesCompleted) {
+function boardPayload(festival, artists, cells, gridSize, wonTicket, linesCompleted, generation) {
   const cellByArtist = Object.fromEntries(cells.map((c) => [c.artist_id, c.status]));
   // Same math /start already uses to refuse a play on a dead board — but
   // that only fires the moment someone taps a square. Without also exposing
@@ -435,6 +452,8 @@ function boardPayload(festival, artists, cells, gridSize, wonTicket, linesComple
     won_ticket: !!wonTicket,
     lines_completed: linesCompleted || 0,
     max_tiers: MAX_TIERS,
+    generation: generation || 0,
+    next_generation_seconds: GEN_SECONDS[Math.min((generation || 0) + 1, GEN_SECONDS.length - 1)],
     busted: evalState.busted,
     board_over: evalState.busted || evalState.completedLines >= MAX_TIERS || (evalState.completedLines >= 1 && !evalState.nextLineReachable),
     cells: artists.map((a) => ({
@@ -613,7 +632,7 @@ app.get("/api/festivals/:slug", async (req, res) => {
       try {
         const decoded = jwt.verify(header.split(" ")[1], JWT_SECRET);
         const { board: b, cells } = await getOrCreateBoard(decoded.id, festival);
-        board = boardPayload(festival, artists, cells, gridSize, b.won_ticket, b.lines_completed);
+        board = boardPayload(festival, artists, cells, gridSize, b.won_ticket, b.lines_completed, b.generation);
       } catch {
         /* not logged in / bad token — just omit board */
       }
@@ -804,16 +823,21 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
     await pool.query(`UPDATE wallets SET tokens = tokens - $1 WHERE user_id = $2`, [festival.entry_cost_tokens, req.user.id]);
 
     // Short (7-question) rounds with a difficulty-tuned pass bar: easy needs a
-    // perfect score, medium/hard ease the bar slightly to offset genuinely
-    // harder questions — same idea as PropQuix Solo's per-box tiers, just
-    // mapped onto artist difficulty instead of board position.
+    // near-perfect score, medium/hard ease the bar slightly to offset
+    // genuinely harder questions — same idea as PropQuix Solo's per-box
+    // tiers, just mapped onto artist difficulty instead of board position.
+    // This is the ACCURACY side of difficulty (how many you must get right);
+    // the TIME side is handled separately by GEN_SECONDS below, since it
+    // escalates with board retries rather than with the artist itself.
     const DIFFICULTY_LEVEL = {
-      easy: { secondsPerQuestion: 20, estPassRatePct: 55, passThreshold: 7 },
-      medium: { secondsPerQuestion: 16, estPassRatePct: 40, passThreshold: 6 },
-      hard: { secondsPerQuestion: 12, estPassRatePct: 22, passThreshold: 5 },
+      easy: { estPassRatePct: 55, passThreshold: 7 },
+      medium: { estPassRatePct: 40, passThreshold: 6 },
+      hard: { estPassRatePct: 22, passThreshold: 5 },
     };
     const level = DIFFICULTY_LEVEL[artist.difficulty] || DIFFICULTY_LEVEL.medium;
     const passThreshold = Math.min(level.passThreshold, shuffled.length);
+    const boardGeneration = board.generation || 0;
+    const secondsPerQuestion = GEN_SECONDS[Math.min(boardGeneration, GEN_SECONDS.length - 1)];
     const inserted = await pool.query(
       `INSERT INTO pending_attempts (user_id, festival_id, artist_id, questions_json) VALUES ($1, $2, $3, $4) RETURNING id`,
       [req.user.id, festival.id, artist.id, JSON.stringify({ items: shuffled, passThreshold })]
@@ -824,8 +848,8 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
     // for stats or a support dispute. See db.js for why it's a separate
     // table from pending_attempts rather than just not deleting that one.
     await pool.query(
-      `INSERT INTO game_attempts (id, user_id, festival_id, artist_id, tokens_spent, question_count, pass_threshold, status) VALUES ($1, $2, $3, $4, $5, $6, $7, 'in_progress')`,
-      [attemptId, req.user.id, festival.id, artist.id, festival.entry_cost_tokens, shuffled.length, passThreshold]
+      `INSERT INTO game_attempts (id, user_id, festival_id, artist_id, tokens_spent, question_count, pass_threshold, seconds_per_question, board_generation, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'in_progress')`,
+      [attemptId, req.user.id, festival.id, artist.id, festival.entry_cost_tokens, shuffled.length, passThreshold, secondsPerQuestion, boardGeneration]
     );
 
     const updatedWallet = await getOrCreateWallet(req.user.id);
@@ -833,7 +857,8 @@ app.post("/api/festivals/:slug/start", requireAuth, async (req, res) => {
       attempt_id: attemptId,
       artist: { id: artist.id, name: artist.name, genre: artist.genre, difficulty: artist.difficulty },
       pass_threshold: passThreshold,
-      level,
+      level: { ...level, secondsPerQuestion },
+      board_generation: boardGeneration,
       questions: shuffled.map((q) => ({ question: q.question, choices: q.choices.map((c) => c.text) })),
       tokens_remaining: updatedWallet.tokens,
     });
@@ -928,8 +953,15 @@ app.post("/api/festivals/:slug/submit", requireAuth, async (req, res) => {
     // Award one ticket per newly-completed line beyond what this board
     // already had credit for — 1 line = 1 ticket, 2 lines = 2 tickets,
     // capped at MAX_TIERS and at the festival's remaining ticket supply.
+    // Also capped at MAX_TIERS *lifetime, per user per festival* — board
+    // resets (see POST /reset below) zero out lines_completed so a fresh
+    // board can win again, but without this second check a bust-then-reset
+    // loop could otherwise farm unlimited tickets off the same festival by
+    // just re-clearing "line 1" over and over on each new generation.
     const previousLines = board.lines_completed || 0;
-    const newLines = Math.max(0, completedLines - previousLines);
+    const { rows: wonCountRows } = await pool.query(`SELECT COUNT(*)::int AS c FROM tickets_won WHERE user_id = $1 AND festival_id = $2`, [req.user.id, festival.id]);
+    const alreadyWonLifetime = wonCountRows[0].c;
+    const newLines = Math.max(0, Math.min(completedLines - previousLines, MAX_TIERS - alreadyWonLifetime));
     const ticketsWon = [];
     for (let i = 0; i < newLines; i++) {
       if (festival.tickets_awarded + ticketsWon.length >= festival.tickets_available) break;
@@ -957,8 +989,41 @@ app.post("/api/festivals/:slug/submit", requireAuth, async (req, res) => {
       tickets_won: ticketsWon,
       // back-compat: first ticket won this call, if any
       ticket_won: ticketsWon[0] || null,
-      board: boardPayload(festival, artists, freshCells, gridSize, completedLines >= 1, Math.max(completedLines, previousLines)),
+      board: boardPayload(festival, artists, freshCells, gridSize, completedLines >= 1, Math.max(completedLines, previousLines), board.generation),
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// A dead or fully-resolved board gets to start clean rather than sitting
+// there unplayable — same "drop another quarter in" idea as an arcade
+// machine. Only allowed once the current board actually has nowhere left to
+// go (see the same board_over math used everywhere else); every reset bumps
+// `generation`, which is what tightens the clock via GEN_SECONDS above. The
+// lifetime ticket cap in /submit (not lines_completed, which this zeroes)
+// is what actually stops a reset loop from farming unlimited tickets.
+app.post("/api/festivals/:slug/reset", requireAuth, async (req, res) => {
+  try {
+    const { rows: fRows } = await pool.query(`SELECT * FROM festivals WHERE slug = $1`, [req.params.slug]);
+    const festival = fRows[0];
+    if (!festival) return res.status(404).json({ error: "Festival not found" });
+    if (festival.status !== "live") return res.status(400).json({ error: "This festival isn't live right now" });
+
+    const { board, cells } = await getOrCreateBoard(req.user.id, festival);
+    const { rows: artists } = await pool.query(`SELECT * FROM artists WHERE festival_id = $1 ORDER BY position ASC`, [festival.id]);
+    const gridSize = gridSizeForArtistCount(artists.length);
+    const cellsByPosition = artists.map((a) => cells.find((c) => c.artist_id === a.id));
+    const state = evaluateBoard(cellsByPosition, gridSize);
+    const boardOver = state.busted || state.completedLines >= MAX_TIERS || (state.completedLines >= 1 && !state.nextLineReachable);
+    if (!boardOver) return res.status(400).json({ error: "This board still has a line in play — no reset needed yet" });
+
+    const nextGeneration = (board.generation || 0) + 1;
+    await pool.query(`UPDATE board_cells SET status = 'available' WHERE board_id = $1`, [board.id]);
+    await pool.query(`UPDATE boards SET lines_completed = 0, won_ticket = FALSE, generation = $1 WHERE id = $2`, [nextGeneration, board.id]);
+
+    const { rows: freshCells } = await pool.query(`SELECT * FROM board_cells WHERE board_id = $1`, [board.id]);
+    res.json({ board: boardPayload(festival, artists, freshCells, gridSize, false, 0, nextGeneration) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

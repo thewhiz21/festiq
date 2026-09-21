@@ -212,7 +212,15 @@
   .banner-gold{background:rgba(255,213,79,0.1);border:2px solid var(--gold);color:var(--gold);}
   .banner-red{background:rgba(255,51,85,0.08);border:2px solid var(--red);color:var(--red);}
 
+  .board-wrap{position:relative;max-width:640px;margin:0 auto;}
   .board-grid{display:grid;gap:8px;margin:0 auto 16px;max-width:640px;}
+  @keyframes booIn{0%{opacity:0;transform:scale(0.96);}100%{opacity:1;transform:scale(1);}}
+  .board-over-overlay{position:absolute;inset:0 0 16px 0;z-index:5;display:flex;align-items:center;justify-content:center;background:rgba(23,11,40,0.84);backdrop-filter:blur(2px);border-radius:16px;animation:booIn .35s cubic-bezier(0.16,1,0.3,1) both;padding:16px;}
+  .boo-card{text-align:center;max-width:300px;}
+  .boo-icon{font-size:40px;margin-bottom:8px;filter:drop-shadow(0 4px 10px rgba(0,0,0,0.4));}
+  .boo-title{font-family:var(--display);font-size:21px;font-weight:900;color:#fff;letter-spacing:0.03em;margin-bottom:8px;}
+  .boo-sub{font-size:12px;color:rgba(255,255,255,0.78);line-height:1.55;margin-bottom:16px;}
+  .boo-gen{font-size:10.5px;color:var(--gold);font-weight:800;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:16px;}
   @keyframes breathe{0%,100%{box-shadow:0 0 0 1px var(--box-accent,var(--border2)),0 0 0 rgba(0,0,0,0);}50%{box-shadow:0 0 0 1px var(--box-accent,var(--border2)),0 0 16px 1px var(--box-glow,rgba(162,48,234,0.18));}}
   @keyframes stampIn{0%{transform:scale(2.2) rotate(-14deg);opacity:0;}60%{transform:scale(0.92) rotate(-4deg);opacity:1;}100%{transform:scale(1) rotate(-8deg);opacity:1;}}
   @keyframes deadShake{0%,100%{transform:translateX(0);}20%{transform:translateX(-3px) rotate(-1deg);}40%{transform:translateX(3px) rotate(1deg);}60%{transform:translateX(-2px);}80%{transform:translateX(2px);}}
@@ -1312,7 +1320,6 @@ function renderFestival(slug){
     const linesCompleted = f.board ? f.board.lines_completed : 0;
     const maxTiers = f.board ? f.board.max_tiers : 2;
     const clearedCount = cells.filter(c => c.status === 'cleared').length;
-    const boardBusted = !!(f.board && f.board.busted);
     const boardOver = !!(f.board && f.board.board_over);
 
     app.innerHTML = `
@@ -1329,8 +1336,7 @@ function renderFestival(slug){
 
       ${!isLive ? `<div class="banner-block" style="background:rgba(20,10,40,0.05);border:2px dashed var(--border2);color:var(--txt2);">🔒 UPCOMING — this board is locked for preview. Come back closer to ${f.event_date || 'the event'} to play it for real.</div>` : ''}
 
-      ${isLive && linesCompleted >= 1 ? `<div class="banner-block banner-gold">🎉 You've won ${linesCompleted} ticket${linesCompleted === 1 ? '' : 's'} on this board! ${linesCompleted < maxTiers ? 'Keep going for another line.' : 'Max tickets reached — board complete.'}</div>` : ''}
-      ${isLive && boardBusted ? `<div class="banner-block" style="background:rgba(255,92,92,0.08);border:2px solid var(--red);color:var(--red);">💥 GAME OVER — every remaining line already has a dead square in it, so no line can ever be completed on this board. No tokens will be spent on the last few squares.</div>` : ''}
+      ${isLive && linesCompleted >= 1 && !boardOver ? `<div class="banner-block banner-gold">🎉 You've won ${linesCompleted} ticket${linesCompleted === 1 ? '' : 's'} on this board! Keep going for another line.</div>` : ''}
 
       ${isLive ? `
       <div class="wallet-panel">
@@ -1354,7 +1360,10 @@ function renderFestival(slug){
         <span><span class="lg-dot" style="background:var(--green);"></span>${clearedCount} cleared</span>
         <span><span class="lg-dot" style="background:var(--red);"></span>${cells.filter(c => c.status === 'dead').length} dead — no retry</span>
       </div>` : ''}
-      <div class="board-grid ${!isLive ? 'is-locked' : ''}" id="board-grid" style="grid-template-columns:repeat(${f.grid_size},1fr);"></div>
+      <div class="board-wrap" id="board-wrap">
+        <div class="board-grid ${!isLive ? 'is-locked' : ''}" id="board-grid" style="grid-template-columns:repeat(${f.grid_size},1fr);"></div>
+        ${isLive && boardOver ? boardOverOverlayHTML(f, linesCompleted, maxTiers) : ''}
+      </div>
 
       ${tierExplainerHTML(f)}
 
@@ -1404,6 +1413,54 @@ function artistInitials(name){
 function artistAccent(name){
   const hue = hashHue(name);
   return { accent: `hsl(${hue},70%,52%)`, glow: `hsla(${hue},85%,60%,0.35)`, tint: `hsl(${hue},85%,95%)` };
+}
+
+// Sits over the whole board once it's over — either fully dead with no line
+// ever reachable again, or maxed out at every ticket this board can pay —
+// so there's always an obvious next action instead of a few grayed-out
+// squares and no explanation. "Try Again" resets every square to available
+// on a brand-new board (see POST /reset in server.js), one generation
+// harder: the clock runs a bit faster each time, which is what keeps a
+// string of free retries from just farming the easiest odds forever.
+function boardOverOverlayHTML(f, linesCompleted, maxTiers){
+  const maxedOut = linesCompleted >= maxTiers;
+  const generation = (f.board && f.board.generation) || 0;
+  const nextSeconds = GEN_SECONDS_PREVIEW[Math.min(generation + 1, GEN_SECONDS_PREVIEW.length - 1)];
+  if (maxedOut) {
+    return `
+      <div class="board-over-overlay">
+        <div class="boo-card">
+          <div class="boo-icon">🏆</div>
+          <div class="boo-title">BOARD COMPLETE</div>
+          <div class="boo-sub">You banked the max ${maxTiers} ticket${maxTiers === 1 ? '' : 's'} this board can pay out. Nice run.</div>
+          <a href="/account" onclick="return handleFestivalLinkClick(event,'/account')" class="btn btn-gold" style="display:inline-flex;text-decoration:none;">VIEW MY TICKETS →</a>
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="board-over-overlay">
+      <div class="boo-card">
+        <div class="boo-icon">💀</div>
+        <div class="boo-title">BOARD OVER</div>
+        <div class="boo-sub">${linesCompleted >= 1 ? `You banked ${linesCompleted} ticket${linesCompleted === 1 ? '' : 's'}, but no line is left to complete.` : 'Every remaining line already has a dead square in it — no line was still possible.'} Start a fresh board and go again.</div>
+        <div class="boo-gen">⚡ Next board: ${nextSeconds}s per question</div>
+        <button class="btn btn-gold" onclick="tryAgainBoard('${f.slug}')">🔄 TRY AGAIN</button>
+      </div>
+    </div>`;
+}
+
+function tryAgainBoard(slug){
+  if (!user) { openAuthModal(); return; }
+  fetch(`${API}/api/festivals/${slug}/reset`, {
+    method: 'POST', headers: authHeaders()
+  }).then(async r => {
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Could not reset this board');
+    return d;
+  }).then(() => {
+    toast('🔄 Fresh board! Every square is back in play — clock is a bit tighter this round.');
+    renderFestival(slug);
+  }).catch(err => toast(err.message, true));
 }
 
 // locked=true renders the same board (used for a not-yet-live festival that
@@ -1467,18 +1524,20 @@ function clearHoverLine(){
   });
 }
 
-// Display-only mirror of the server's DIFFICULTY_LEVEL/QUESTIONS_PER_QUIZ
+// Display-only mirror of the server's QUESTIONS_PER_QUIZ/GEN_SECONDS
 // constants (server.js) — used purely to show an accurate cost/time preview
 // in the confirm-play modal *before* committing to /start, which is the
 // call that actually spends the token. Not authoritative: the real numbers
-// always come back from /start itself.
+// always come back from /start itself. Time is driven by the board's
+// generation (how many times it's been reset after busting), not by the
+// artist's own difficulty — see GEN_SECONDS in server.js for why.
 const QUESTIONS_PER_QUIZ_PREVIEW = 7;
-const DIFFICULTY_SECONDS_PREVIEW = { easy: 20, medium: 16, hard: 12 };
+const GEN_SECONDS_PREVIEW = [18, 16, 14, 12];
 
 function handleBoxClick(artistId, status){
   if (!user) { openAuthModal(); return; }
   if (status !== 'available') return;
-  if (currentFestival.board && currentFestival.board.won_ticket) { toast('You already won a ticket to this festival!'); return; }
+  if (currentFestival.board && currentFestival.board.board_over) { toast('This board is over — tap Try Again to start a fresh one.'); return; }
   const cell = (currentFestival.board ? currentFestival.board.cells : currentFestival.artists).find(c => (c.artist_id || c.id) === artistId);
   openConfirmPlayModal(artistId, cell);
 }
@@ -1498,13 +1557,15 @@ function ticketBadgeHTML(n, opts){
 }
 
 function openConfirmPlayModal(artistId, cell){
-  const seconds = DIFFICULTY_SECONDS_PREVIEW[cell?.difficulty] || DIFFICULTY_SECONDS_PREVIEW.medium;
+  const generation = (currentFestival.board && currentFestival.board.generation) || 0;
+  const seconds = GEN_SECONDS_PREVIEW[Math.min(generation, GEN_SECONDS_PREVIEW.length - 1)];
   const totalSeconds = QUESTIONS_PER_QUIZ_PREVIEW * seconds;
   const mm = Math.floor(totalSeconds / 60), ss = totalSeconds % 60;
   const cost = currentFestival.entry_cost_tokens;
   document.getElementById('confirm-play-modal-body').innerHTML = `
     <h3>🎤 ${cell?.name || 'This artist'}</h3>
     <p class="sub">One shot — answer wrong and this square is dead for your board, no retry.</p>
+    ${generation > 0 ? `<p class="sub" style="color:var(--gold);font-weight:700;">⚡ Board round ${generation + 1} — the clock's a bit faster than your first board.</p>` : ''}
     <div style="display:flex;flex-direction:column;gap:8px;margin:16px 0;">
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg2);border-radius:8px;">
         <span style="font-size:11.5px;color:var(--txt2);">Cost</span>
