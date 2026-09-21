@@ -931,6 +931,18 @@ function parseFestivalDate(raw){
   return Infinity;
 }
 
+// Autosort used everywhere we list festivals: live boards float to the top
+// (playable right now beats a countdown), then soonest-date first within
+// each group — live and upcoming.
+function autosortFestivals(list){
+  return [...list].sort((a, b) => {
+    const aLive = a.status === 'live' ? 0 : 1;
+    const bLive = b.status === 'live' ? 0 : 1;
+    if (aLive !== bLive) return aLive - bLive;
+    return parseFestivalDate(a.event_date) - parseFestivalDate(b.event_date);
+  });
+}
+
 function renderList(){
   clearDemoTimers();
   document.title = 'FestiQ — Festival Trivia Bingo to Win Real Tickets';
@@ -954,7 +966,7 @@ function renderList(){
     const spotSlot = document.getElementById('spotlight-slot');
     if (!list.length) { grid.innerHTML = '<div class="empty">No festivals live yet.</div>'; if (spotSlot) spotSlot.innerHTML = ''; return; }
     if (spotSlot) spotSlot.innerHTML = spotlightHTML(list);
-    const sorted = [...list].sort((a, b) => parseFestivalDate(a.event_date) - parseFestivalDate(b.event_date));
+    const sorted = autosortFestivals(list);
     grid.innerHTML = sorted.map(f => {
       const isLive = f.status === 'live';
       const soldOut = isLive && f.tickets_awarded >= f.tickets_available;
@@ -1048,7 +1060,7 @@ function renderPricing(){
   fetch(`${API}/api/festivals`).then(r => r.json()).then(list => {
     const grid = document.getElementById('pricing-grid');
     if (!list.length) { grid.innerHTML = '<div class="empty">No festivals yet.</div>'; return; }
-    const sorted = [...list].sort((a, b) => parseFestivalDate(a.event_date) - parseFestivalDate(b.event_date));
+    const sorted = autosortFestivals(list);
     grid.innerHTML = sorted.map(f => {
       const acc = f.banner_color || 'var(--purple)';
       return `
