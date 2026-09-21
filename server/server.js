@@ -8,6 +8,7 @@ const { pool, initSchema } = require("./db");
 const { gridSizeForArtistCount, evaluateBoard, MAX_TIERS } = require("./board");
 const { seed } = require("./seed");
 const { generateAndVerifyQuestions, TARGET_BANK_SIZE } = require("./question_gen");
+const payments = require("./payments");
 
 // Lazily reserves this board generation's question set for EVERY artist in
 // the festival at once, the first time any square is started on a fresh
@@ -75,7 +76,11 @@ const BOARD_PACE_SECONDS = [18, 16, 14, 12];
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Captures the exact raw bytes alongside the parsed body (req.rawBody) so
+// the SeamlessChex webhook route below can verify a signature computed over
+// the original payload — express.json() already consumes the request
+// stream, so a route-local raw-body parser downstream would see nothing.
+app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));
 
 // ─── Pre-launch gate ────────────────────────────────────────────────────────
 // While this is being built out, the public site should show nothing but a
@@ -779,6 +784,89 @@ app.post("/api/wallet/demo-buy-tokens", requireAuth, async (req, res) => {
     );
     const updated = await getOrCreateWallet(req.user.id);
     res.json({ tokens: updated.tokens, tokens_added: tokensToAdd, demo: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Tells the frontend whether a real payment provider is configured, so it
+// can offer real checkout when one is and quietly fall back to the demo
+// instant-credit flow when one isn't — no separate deploy needed to flip
+// this once SeamlessChex credentials are added to the server's env.
+app.get("/api/payments/config", (req, res) => {
+  res.json({ enabled: payments.isConfigured(), provider: payments.isConfigured() ? "seamlesschex" : null });
+});
+
+// Real-money purchase path. Unlike /api/wallet/demo-buy-tokens, this never
+// credits tokens itself — it only creates a 'pending' record and hands back
+// a hosted checkout URL. Tokens are granted exclusively by the webhook
+// below once SeamlessChex confirms the charge actually went through.
+app.post("/api/wallet/checkout", requireAuth, async (req, res) => {
+  try {
+    if (!payments.isConfigured()) {
+      return res.status(503).json({ error: "Real payments aren't configured on this server yet — see server/payments.js" });
+    }
+    const { rows: packRows } = await pool.query(`SELECT * FROM token_packs WHERE id = $1 AND active = TRUE`, [req.body.pack_id]);
+    const pack = packRows[0];
+    if (!pack) return res.status(404).json({ error: "That token pack is no longer available" });
+    const tokensToAdd = pack.tokens + Math.round((pack.tokens * (pack.bonus_pct || 0)) / 100);
+
+    const { rows: pendingRows } = await pool.query(
+      `INSERT INTO token_purchases (user_id, pack_id, tokens, price_usd_cents, status, provider) VALUES ($1,$2,$3,$4,'pending','seamlesschex') RETURNING id`,
+      [req.user.id, pack.id, tokensToAdd, pack.price_usd_cents]
+    );
+    const purchaseId = pendingRows[0].id;
+
+    try {
+      const { checkoutUrl, providerReference } = await payments.createCheckoutLink({
+        reference: String(purchaseId),
+        amountCents: pack.price_usd_cents,
+        description: `FestiQ — ${pack.label} (${tokensToAdd} tokens)`,
+        successPath: `/account?purchase=${purchaseId}`,
+        cancelPath: `/?purchase_cancelled=${purchaseId}`,
+      });
+      await pool.query(`UPDATE token_purchases SET provider_reference = $1 WHERE id = $2`, [providerReference, purchaseId]);
+      res.json({ checkout_url: checkoutUrl, purchase_id: purchaseId });
+    } catch (err) {
+      // Don't leave an orphaned pending row if checkout creation itself failed.
+      await pool.query(`DELETE FROM token_purchases WHERE id = $1`, [purchaseId]);
+      throw err;
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SeamlessChex calls this when a checkout succeeds (or fails/expires).
+// Fails closed: an unverified request is rejected outright rather than
+// trusted, since this is the one route that can turn into free tokens if
+// abused — see verifyWebhookSignature in payments.js (not yet implemented
+// against their real signing scheme).
+app.post("/api/webhooks/seamlesschex", async (req, res) => {
+  try {
+    if (!payments.verifyWebhookSignature(req.rawBody, req.headers)) {
+      return res.status(401).json({ error: "Invalid or unverified webhook signature" });
+    }
+    const payload = req.body;
+    // TODO: field names below are placeholders until the real payload shape
+    // is confirmed from SeamlessChex's docs (see payments.js) — adjust to
+    // match whatever they actually send.
+    const purchaseId = Number(payload.reference);
+    const status = payload.status; // expect something like 'completed' | 'failed'
+    const providerReference = payload.id;
+
+    const { rows } = await pool.query(`SELECT * FROM token_purchases WHERE id = $1`, [purchaseId]);
+    const purchase = rows[0];
+    if (!purchase) return res.status(404).json({ error: "Unknown purchase reference" });
+    if (purchase.status === "completed") return res.json({ ok: true, already_processed: true }); // idempotent
+
+    if (status === "completed" || status === "succeeded" || status === "paid") {
+      await pool.query(`UPDATE token_purchases SET status = 'completed', provider_reference = $1 WHERE id = $2`, [providerReference, purchaseId]);
+      await pool.query(`UPDATE wallets SET tokens = tokens + $1 WHERE user_id = $2`, [purchase.tokens, purchase.user_id]);
+    } else {
+      await pool.query(`UPDATE token_purchases SET status = 'failed', provider_reference = $1 WHERE id = $2`, [providerReference, purchaseId]);
+    }
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

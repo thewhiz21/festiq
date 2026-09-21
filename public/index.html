@@ -571,9 +571,31 @@ function openTokenShop(){
   fillTokenPackGrid('pack-grid', true);
 }
 
+let paymentsConfigPromise = null;
+function ensurePaymentsConfig(){
+  if (!paymentsConfigPromise) {
+    paymentsConfigPromise = fetch(`${API}/api/payments/config`).then(r => r.json()).catch(() => ({ enabled: false }));
+  }
+  return paymentsConfigPromise;
+}
+
 function buyPack(id){
-  closeModal('shop-modal');
-  demoBuyTokens(id);
+  ensurePaymentsConfig().then(cfg => {
+    if (!cfg.enabled) {
+      // No real processor configured on this server yet — same instant-credit
+      // demo flow as before, so the game loop keeps working during development.
+      closeModal('shop-modal');
+      demoBuyTokens(id);
+      return;
+    }
+    fetch(`${API}/api/wallet/checkout`, { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ pack_id: id }) })
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) { toast(d.error); return; }
+        window.location.href = d.checkout_url; // hosted SeamlessChex checkout page
+      })
+      .catch(() => toast('Could not start checkout — try again in a moment'));
+  });
 }
 
 function openAuthModal(){ document.getElementById('auth-modal').classList.add('open'); }

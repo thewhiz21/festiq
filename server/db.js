@@ -267,8 +267,23 @@ async function initSchema() {
       pack_id INTEGER REFERENCES token_packs(id),
       tokens INTEGER NOT NULL,
       price_usd_cents INTEGER,
+      -- 'completed' for the existing demo-buy flow (kept as the default so
+      -- old rows and demo purchases don't need backfilling) and for any
+      -- real purchase once its webhook confirms. A real purchase is
+      -- inserted as 'pending' the moment a checkout link is created and
+      -- ONLY flips to 'completed' — crediting the wallet — when
+      -- SeamlessChex's webhook confirms the charge; it never gets tokens
+      -- from just visiting a checkout page. See server/payments.js.
+      status TEXT NOT NULL DEFAULT 'completed',
+      provider TEXT,
+      -- SeamlessChex's own id for this checkout/charge — UNIQUE so a
+      -- retried or duplicate-delivered webhook can never credit twice.
+      provider_reference TEXT UNIQUE,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    ALTER TABLE token_purchases ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'completed';
+    ALTER TABLE token_purchases ADD COLUMN IF NOT EXISTS provider TEXT;
+    ALTER TABLE token_purchases ADD COLUMN IF NOT EXISTS provider_reference TEXT UNIQUE;
 
     -- Minimal in-house pageview log so we can see traffic sources (Google
     -- vs. direct vs. social vs. other referrers) before a real analytics
