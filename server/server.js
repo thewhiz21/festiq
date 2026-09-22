@@ -9,6 +9,7 @@ const { gridSizeForArtistCount, evaluateBoard, MAX_TIERS } = require("./board");
 const { seed } = require("./seed");
 const { generateAndVerifyQuestions, TARGET_BANK_SIZE } = require("./question_gen");
 const payments = require("./payments");
+const paypal = require("./paypal");
 
 // Lazily reserves this board generation's question set for EVERY artist in
 // the festival at once, the first time any square is started on a fresh
@@ -794,6 +795,13 @@ app.post("/api/wallet/demo-buy-tokens", requireAuth, async (req, res) => {
 // instant-credit flow when one isn't — no separate deploy needed to flip
 // this once SeamlessChex credentials are added to the server's env.
 app.get("/api/payments/config", (req, res) => {
+  // PayPal takes priority when both happen to be configured — it's the one
+  // with a finished, working integration (see server/paypal.js); the
+  // SeamlessChex path stays available for later since its scaffolding is
+  // already in place, just blocked on their non-public API reference.
+  if (paypal.isConfigured()) {
+    return res.json({ enabled: true, provider: "paypal", paypal_client_id: paypal.publicClientId() });
+  }
   res.json({ enabled: payments.isConfigured(), provider: payments.isConfigured() ? "seamlesschex" : null });
 });
 
@@ -865,6 +873,118 @@ app.post("/api/webhooks/seamlesschex", async (req, res) => {
       await pool.query(`UPDATE wallets SET tokens = tokens + $1 WHERE user_id = $2`, [purchase.tokens, purchase.user_id]);
     } else {
       await pool.query(`UPDATE token_purchases SET status = 'failed', provider_reference = $1 WHERE id = $2`, [providerReference, purchaseId]);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── PayPal (Smart Buttons / Orders v2) ──────────────────────────────────────
+// Same pending-then-confirm shape as the SeamlessChex path above: this route
+// only creates the order, it never credits tokens. Crediting happens in
+// /api/wallet/paypal/capture below, gated on PayPal itself reporting the
+// capture as COMPLETED for the exact amount this pack costs — never on
+// anything the client claims.
+app.post("/api/wallet/paypal/create-order", requireAuth, async (req, res) => {
+  try {
+    if (!paypal.isConfigured()) return res.status(503).json({ error: "PayPal isn't configured on this server yet" });
+    const { rows: packRows } = await pool.query(`SELECT * FROM token_packs WHERE id = $1 AND active = TRUE`, [req.body.pack_id]);
+    const pack = packRows[0];
+    if (!pack) return res.status(404).json({ error: "That token pack is no longer available" });
+    const tokensToAdd = pack.tokens + Math.round((pack.tokens * (pack.bonus_pct || 0)) / 100);
+
+    const { rows: pendingRows } = await pool.query(
+      `INSERT INTO token_purchases (user_id, pack_id, tokens, price_usd_cents, status, provider) VALUES ($1,$2,$3,$4,'pending','paypal') RETURNING id`,
+      [req.user.id, pack.id, tokensToAdd, pack.price_usd_cents]
+    );
+    const purchaseId = pendingRows[0].id;
+
+    try {
+      const { orderId } = await paypal.createOrder({
+        referenceId: purchaseId,
+        amountUsd: pack.price_usd_cents / 100,
+        description: `FestiQ — ${pack.label} (${tokensToAdd} tokens)`,
+      });
+      await pool.query(`UPDATE token_purchases SET provider_reference = $1 WHERE id = $2`, [orderId, purchaseId]);
+      res.json({ order_id: orderId, purchase_id: purchaseId });
+    } catch (err) {
+      await pool.query(`DELETE FROM token_purchases WHERE id = $1`, [purchaseId]);
+      throw err;
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Called from the client's PayPal Buttons onApprove callback right after
+// the buyer approves on PayPal's side. Still fully server-verified: we
+// capture the order ourselves, check PayPal's own reported status/amount/
+// reference against what we expect, and only THEN touch the wallet.
+// Idempotent — a duplicate capture call (e.g. a flaky retry) can't double-
+// credit because it checks purchase.status first.
+app.post("/api/wallet/paypal/capture", requireAuth, async (req, res) => {
+  try {
+    const { order_id, purchase_id } = req.body;
+    const { rows } = await pool.query(
+      `SELECT * FROM token_purchases WHERE id = $1 AND provider_reference = $2 AND user_id = $3`,
+      [purchase_id, order_id, req.user.id]
+    );
+    const purchase = rows[0];
+    if (!purchase) return res.status(404).json({ error: "Unknown or mismatched purchase" });
+    if (purchase.status === "completed") {
+      const wallet = await getOrCreateWallet(req.user.id);
+      return res.json({ ok: true, already_processed: true, tokens: wallet.tokens });
+    }
+
+    const capture = await paypal.captureOrder(order_id);
+    const expectedAmount = purchase.price_usd_cents / 100;
+    const amountMatches = capture.amountUsd != null && Math.abs(capture.amountUsd - expectedAmount) < 0.005;
+    const referenceMatches = String(capture.referenceId) === String(purchase.id);
+
+    if (capture.status !== "COMPLETED" || !amountMatches || !referenceMatches) {
+      await pool.query(`UPDATE token_purchases SET status = 'failed' WHERE id = $1`, [purchase.id]);
+      return res.status(402).json({ error: "Payment could not be confirmed" });
+    }
+
+    await pool.query(`UPDATE token_purchases SET status = 'completed' WHERE id = $1`, [purchase.id]);
+    await pool.query(`UPDATE wallets SET tokens = tokens + $1 WHERE user_id = $2`, [purchase.tokens, req.user.id]);
+    const wallet = await getOrCreateWallet(req.user.id);
+    res.json({ ok: true, tokens: wallet.tokens, tokens_added: purchase.tokens });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reconciliation backstop, not the primary crediting path (capture above
+// is) — catches the case where a buyer pays but the browser tab closes or
+// the network drops before the capture call above completes, and handles
+// refund/dispute events PayPal sends after the fact. Fails closed on an
+// unverified signature exactly like the SeamlessChex webhook, except this
+// one's verification is real (PayPal's own /verify-webhook-signature API),
+// not a stub.
+app.post("/api/webhooks/paypal", async (req, res) => {
+  try {
+    const rawBodyText = req.rawBody ? req.rawBody.toString("utf8") : JSON.stringify(req.body);
+    const verified = await paypal.verifyWebhookSignature(req.headers, rawBodyText);
+    if (!verified) return res.status(401).json({ error: "Invalid or unverified webhook signature" });
+
+    const event = req.body;
+    if (event.event_type === "PAYMENT.CAPTURE.COMPLETED") {
+      const purchaseId = Number(event.resource?.custom_id);
+      const { rows } = await pool.query(`SELECT * FROM token_purchases WHERE id = $1`, [purchaseId]);
+      const purchase = rows[0];
+      if (purchase && purchase.status !== "completed") {
+        await pool.query(`UPDATE token_purchases SET status = 'completed' WHERE id = $1`, [purchaseId]);
+        await pool.query(`UPDATE wallets SET tokens = tokens + $1 WHERE user_id = $2`, [purchase.tokens, purchase.user_id]);
+      }
+    } else if (event.event_type === "PAYMENT.CAPTURE.DENIED" || event.event_type === "PAYMENT.CAPTURE.REFUNDED") {
+      const purchaseId = Number(event.resource?.custom_id);
+      // Flagged for manual admin follow-up rather than auto-clawing back
+      // tokens — by the time a refund lands, the player may have already
+      // spent them, and silently deducting from a wallet that's gone
+      // negative is worse than a human deciding case by case.
+      await pool.query(`UPDATE token_purchases SET status = 'refunded' WHERE id = $1 AND status = 'completed'`, [purchaseId]);
     }
     res.json({ ok: true });
   } catch (err) {

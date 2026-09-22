@@ -449,9 +449,13 @@
 <div class="modal-overlay" id="shop-modal">
   <div class="modal" style="max-width:560px;">
     <h3>🎟️ The Token Shop</h3>
-    <p class="sub">Grab a stack of tokens — spend them at any festival, any time. No card required for the demo.</p>
+    <p class="sub" id="shop-sub">Grab a stack of tokens — spend them at any festival, any time. No card required for the demo.</p>
     <div class="pack-grid" id="pack-grid"></div>
-    <button class="btn" style="width:100%;margin-top:14px;" onclick="closeModal('shop-modal')">CLOSE</button>
+    <div id="paypal-checkout-panel" style="display:none;margin-top:16px;">
+      <div id="paypal-button-container"></div>
+      <button class="btn" style="width:100%;margin-top:10px;" onclick="cancelPaypalCheckout()">BACK TO PACKS</button>
+    </div>
+    <button class="btn" id="shop-close-btn" style="width:100%;margin-top:14px;" onclick="closeModal('shop-modal')">CLOSE</button>
   </div>
 </div>
 
@@ -588,14 +592,80 @@ function buyPack(id){
       demoBuyTokens(id);
       return;
     }
+    if (cfg.provider === 'paypal') {
+      showPaypalCheckout(id, cfg.paypal_client_id);
+      return;
+    }
+    // SeamlessChex path: redirect to their hosted checkout page.
     fetch(`${API}/api/wallet/checkout`, { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ pack_id: id }) })
       .then(r => r.json())
       .then(d => {
         if (d.error) { toast(d.error); return; }
-        window.location.href = d.checkout_url; // hosted SeamlessChex checkout page
+        window.location.href = d.checkout_url;
       })
       .catch(() => toast('Could not start checkout — try again in a moment'));
   });
+}
+
+// ─── PayPal on-page checkout ────────────────────────────────────────────────
+let paypalSdkPromise = null;
+function ensurePaypalSdk(clientId){
+  if (!paypalSdkPromise) {
+    paypalSdkPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId)}&currency=USD`;
+      s.onload = () => resolve(window.paypal);
+      s.onerror = () => reject(new Error('Could not load PayPal'));
+      document.head.appendChild(s);
+    });
+  }
+  return paypalSdkPromise;
+}
+
+function showPaypalCheckout(packId, clientId){
+  if (!user) { openAuthModal(); return; }
+  document.getElementById('pack-grid').style.display = 'none';
+  document.getElementById('shop-sub').style.display = 'none';
+  document.getElementById('shop-close-btn').style.display = 'none';
+  const panel = document.getElementById('paypal-checkout-panel');
+  const container = document.getElementById('paypal-button-container');
+  container.innerHTML = '<div class="empty">Loading PayPal…</div>';
+  panel.style.display = 'block';
+
+  ensurePaypalSdk(clientId).then(paypalSdk => {
+    container.innerHTML = '';
+    paypalSdk.Buttons({
+      createOrder: () => {
+        return fetch(`${API}/api/wallet/paypal/create-order`, { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ pack_id: packId }) })
+          .then(r => r.json())
+          .then(d => {
+            if (d.error) { toast(d.error); throw new Error(d.error); }
+            container.dataset.purchaseId = d.purchase_id;
+            return d.order_id;
+          });
+      },
+      onApprove: (data) => {
+        return fetch(`${API}/api/wallet/paypal/capture`, { method: 'POST', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ order_id: data.orderID, purchase_id: Number(container.dataset.purchaseId) }) })
+          .then(r => r.json())
+          .then(d => {
+            if (d.error) { toast(d.error); return; }
+            toast(`+${d.tokens_added} tokens added!`);
+            refreshWallet();
+            closeModal('shop-modal');
+            cancelPaypalCheckout();
+          });
+      },
+      onError: () => toast('Something went wrong with PayPal — try again'),
+    }).render('#paypal-button-container');
+  }).catch(() => { container.innerHTML = '<div class="empty">Could not load PayPal — try again in a moment.</div>'; });
+}
+
+function cancelPaypalCheckout(){
+  document.getElementById('pack-grid').style.display = '';
+  document.getElementById('shop-sub').style.display = '';
+  document.getElementById('shop-close-btn').style.display = '';
+  document.getElementById('paypal-checkout-panel').style.display = 'none';
+  document.getElementById('paypal-button-container').innerHTML = '';
 }
 
 function openAuthModal(){ document.getElementById('auth-modal').classList.add('open'); }
