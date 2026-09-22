@@ -345,6 +345,23 @@
           </table>
         </div>
       </div>
+      <div class="card">
+        <h2>Excluded IPs <small>your own visits — never counted as traffic</small></h2>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input id="newExcludeIp" placeholder="e.g. 184.93.96.142" style="flex:1;" />
+          <button class="btn-blue btn-sm" onclick="addExcludeIp()">+ Add IP</button>
+        </div>
+        <div id="excludedIpsList" class="table-wrap"></div>
+      </div>
+      <div class="card">
+        <h2>Recent visitor IPs <small>most recent 50 unique IPs — click Exclude to stop counting one</small></h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>IP</th><th>Last seen</th><th>Views</th><th>Actions</th></tr></thead>
+            <tbody id="recentIpsBody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- GAME LOG -->
@@ -1111,7 +1128,47 @@ function loadTraffic(){
     document.getElementById('trafficReferrersBody').innerHTML = d.top_referrers.length ? d.top_referrers.map(r=>`
       <tr><td>${esc(r.referrer_host)}</td><td>${esc(SOURCE_LABELS[r.source_type] || r.source_type)}</td><td>${r.views}</td></tr>
     `).join('') : `<tr><td colspan="3" class="empty">No external referrers yet.</td></tr>`;
+
+    document.getElementById('excludedIpsList').innerHTML = d.excluded_ips.length ? `<table><tbody>${d.excluded_ips.map(ip=>`
+      <tr><td>${esc(ip)}</td><td class="actions" style="text-align:right;"><button class="btn-red btn-sm" onclick="removeExcludeIp('${escAttr(ip)}')">Remove</button></td></tr>
+    `).join('')}</tbody></table>` : `<div class="empty">No IPs excluded yet — your own visits are still counted as traffic.</div>`;
   }).catch(e=>toast(e.message, true));
+  loadRecentIps();
+}
+
+function addExcludeIp(){
+  const ip = document.getElementById('newExcludeIp').value.trim();
+  if(!ip) return;
+  api('/api/admin/traffic/exclude-ips', { method:'POST', body: JSON.stringify({ ip }) })
+    .then(()=>{ document.getElementById('newExcludeIp').value=''; toast(`${ip} excluded`); loadTraffic(); })
+    .catch(e=>toast(e.message, true));
+}
+
+function removeExcludeIp(ip){
+  api(`/api/admin/traffic/exclude-ips/${encodeURIComponent(ip)}`, { method:'DELETE' })
+    .then(()=>{ toast(`${ip} removed from exclude list`); loadTraffic(); })
+    .catch(e=>toast(e.message, true));
+}
+
+function loadRecentIps(){
+  api('/api/admin/traffic/recent-ips').then(list=>{
+    document.getElementById('recentIpsBody').innerHTML = list.length ? list.map(r=>`
+      <tr>
+        <td>${esc(r.ip_address)}</td>
+        <td>${new Date(r.last_seen).toLocaleString()}</td>
+        <td>${r.views}</td>
+        <td class="actions">
+          ${r.excluded ? `<span style="color:#8a8398;">Excluded</span>` : `<button class="btn-sm" onclick="addExcludeIpDirect('${escAttr(r.ip_address)}')">Exclude</button>`}
+        </td>
+      </tr>
+    `).join('') : `<tr><td colspan="4" class="empty">No visitor IPs logged yet.</td></tr>`;
+  }).catch(e=>toast(e.message, true));
+}
+
+function addExcludeIpDirect(ip){
+  api('/api/admin/traffic/exclude-ips', { method:'POST', body: JSON.stringify({ ip }) })
+    .then(()=>{ toast(`${ip} excluded`); loadTraffic(); })
+    .catch(e=>toast(e.message, true));
 }
 
 // ── Game Log ──

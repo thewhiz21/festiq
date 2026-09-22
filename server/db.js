@@ -300,8 +300,15 @@ async function initSchema() {
       referrer_host TEXT,
       source_type TEXT NOT NULL DEFAULT 'direct', -- google | other_search | social | referral | direct
       user_agent TEXT,
+      -- Only populated going forward (see /api/track) — rows logged before
+      -- this column existed have NULL here, which is fine, it just means
+      -- they don't show up in the admin "recent visitor IPs" list. Never
+      -- recorded for an IP already on the traffic_exclude_ips settings list
+      -- (see siteSettings) — those requests never reach the INSERT at all.
+      ip_address TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    ALTER TABLE page_views ADD COLUMN IF NOT EXISTS ip_address TEXT;
     CREATE INDEX IF NOT EXISTS idx_page_views_created_at ON page_views (created_at);
   `);
 }

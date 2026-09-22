@@ -108,15 +108,22 @@ const siteSettings = {
   // spot regardless of date — e.g. to promote a festival you're pushing
   // marketing spend behind this week.
   spotlight_festival_id: null,
+  // IPs excluded from pageview tracking (see /api/track) — the owner's own
+  // visits (testing, QA, just checking the site) so they don't inflate the
+  // admin Traffic tab. Admin-editable (Traffic tab has an Add IP/remove UI);
+  // TRAFFIC_EXCLUDE_IPS is only a one-time seed for a fresh DB with no
+  // 'traffic_exclude_ips' row yet, same pattern as SITE_LOCKED above.
+  traffic_exclude_ips: (process.env.TRAFFIC_EXCLUDE_IPS || "").split(",").map((ip) => ip.trim()).filter(Boolean),
 };
 
 async function loadSiteSettings() {
   try {
-    const { rows } = await pool.query(`SELECT key, value FROM settings WHERE key IN ('site_locked', 'preview_key', 'spotlight_festival_id')`);
+    const { rows } = await pool.query(`SELECT key, value FROM settings WHERE key IN ('site_locked', 'preview_key', 'spotlight_festival_id', 'traffic_exclude_ips')`);
     for (const row of rows) {
       if (row.key === "site_locked") siteSettings.site_locked = row.value === "true";
       if (row.key === "preview_key") siteSettings.preview_key = row.value || "";
       if (row.key === "spotlight_festival_id") siteSettings.spotlight_festival_id = row.value ? parseInt(row.value, 10) : null;
+      if (row.key === "traffic_exclude_ips") siteSettings.traffic_exclude_ips = row.value ? row.value.split(",").map((ip) => ip.trim()).filter(Boolean) : [];
     }
   } catch (err) {
     console.error("Failed to load site settings, using env var defaults:", err.message);
@@ -131,6 +138,7 @@ async function saveSiteSetting(key, value) {
   if (key === "site_locked") siteSettings.site_locked = value === true || value === "true";
   if (key === "preview_key") siteSettings.preview_key = value || "";
   if (key === "spotlight_festival_id") siteSettings.spotlight_festival_id = value ? parseInt(value, 10) : null;
+  if (key === "traffic_exclude_ips") siteSettings.traffic_exclude_ips = value ? String(value).split(",").map((ip) => ip.trim()).filter(Boolean) : [];
 }
 
 function parseCookies(header) {
@@ -600,13 +608,10 @@ function classifyReferrer(referrerHost) {
 }
 
 // Your own visits (testing, QA, just checking the site) shouldn't count as
-// traffic — same idea as GA's "internal traffic" filter. Comma-separated
-// list of IPs to exclude, e.g. "184.93.96.142,203.0.113.7" for a home IP
-// plus a phone/office one. No effect on anything except this analytics
-// beacon — doesn't block or restrict those IPs from the site itself.
-const TRAFFIC_EXCLUDE_IPS = new Set(
-  (process.env.TRAFFIC_EXCLUDE_IPS || "").split(",").map((ip) => ip.trim()).filter(Boolean)
-);
+// traffic — same idea as GA's "internal traffic" filter. The actual list
+// lives in siteSettings.traffic_exclude_ips (admin-editable on the Traffic
+// tab) — no effect on anything except this analytics beacon, doesn't block
+// or restrict those IPs from the site itself.
 function getClientIp(req) {
   // req.ip already resolves through X-Forwarded-For correctly once
   // "trust proxy" is set, but a proxy chain can list multiple IPs
@@ -621,7 +626,8 @@ app.post("/api/track", async (req, res) => {
     // Never let a broken tracking beacon be visible to the visitor — this
     // endpoint fails silently either way.
     if (isKnownCrawler(req.headers["user-agent"])) return res.status(204).end();
-    if (TRAFFIC_EXCLUDE_IPS.has(getClientIp(req))) return res.status(204).end();
+    const clientIp = getClientIp(req);
+    if (siteSettings.traffic_exclude_ips.includes(clientIp)) return res.status(204).end();
     const pagePath = String(req.body?.path || "").slice(0, 255);
     const referrer = req.body?.referrer ? String(req.body.referrer).slice(0, 500) : null;
     let referrerHost = null;
@@ -630,8 +636,8 @@ app.post("/api/track", async (req, res) => {
     }
     const sourceType = classifyReferrer(referrerHost);
     await pool.query(
-      `INSERT INTO page_views (path, referrer, referrer_host, source_type, user_agent) VALUES ($1, $2, $3, $4, $5)`,
-      [pagePath, referrer, referrerHost, sourceType, (req.headers["user-agent"] || "").slice(0, 300)]
+      `INSERT INTO page_views (path, referrer, referrer_host, source_type, user_agent, ip_address) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [pagePath, referrer, referrerHost, sourceType, (req.headers["user-agent"] || "").slice(0, 300), clientIp || null]
     );
     res.status(204).end();
   } catch (err) {
@@ -2071,6 +2077,7 @@ app.get("/api/admin/traffic", requireAdmin, async (req, res) => {
       by_day: byDay.rows,
       top_pages: topPages.rows,
       top_referrers: topReferrers.rows,
+      excluded_ips: siteSettings.traffic_exclude_ips,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2078,13 +2085,58 @@ app.get("/api/admin/traffic", requireAdmin, async (req, res) => {
 });
 
 // One-time reset for when the log has been polluted by dev/QA/owner
-// traffic that predates TRAFFIC_EXCLUDE_IPS being set — there's no per-row
-// IP stored historically, so individual bad rows can't be picked out; this
-// clears everything and lets the numbers start clean from here on.
+// traffic that predates an IP being excluded — there's no per-row IP
+// stored for anything logged before that column existed, so individual bad
+// rows can't be picked out; this clears everything and lets the numbers
+// start clean from here on.
 app.delete("/api/admin/traffic", requireAdmin, async (req, res) => {
   try {
     const { rowCount } = await pool.query(`DELETE FROM page_views`);
     res.json({ success: true, deleted: rowCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Most recent 50 unique visitor IPs, newest-seen first — lets you eyeball
+// the log and decide who to exclude, rather than guessing your own IP from
+// a whatismyip.com lookup. NULL ip_address rows (tracked before this column
+// existed, or a request with no resolvable IP) are left out entirely.
+app.get("/api/admin/traffic/recent-ips", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT ip_address, MAX(created_at) AS last_seen, COUNT(*)::int AS views
+      FROM page_views
+      WHERE ip_address IS NOT NULL
+      GROUP BY ip_address
+      ORDER BY last_seen DESC
+      LIMIT 50
+    `);
+    res.json(rows.map((r) => ({ ...r, excluded: siteSettings.traffic_exclude_ips.includes(r.ip_address) })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/admin/traffic/exclude-ips", requireAdmin, async (req, res) => {
+  try {
+    const ip = String(req.body?.ip || "").trim();
+    if (!ip) return res.status(400).json({ error: "ip is required" });
+    const next = siteSettings.traffic_exclude_ips.includes(ip)
+      ? siteSettings.traffic_exclude_ips
+      : [...siteSettings.traffic_exclude_ips, ip];
+    await saveSiteSetting("traffic_exclude_ips", next.join(","));
+    res.json({ excluded_ips: siteSettings.traffic_exclude_ips });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/admin/traffic/exclude-ips/:ip", requireAdmin, async (req, res) => {
+  try {
+    const next = siteSettings.traffic_exclude_ips.filter((ip) => ip !== req.params.ip);
+    await saveSiteSetting("traffic_exclude_ips", next.join(","));
+    res.json({ excluded_ips: siteSettings.traffic_exclude_ips });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
