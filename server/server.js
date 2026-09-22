@@ -76,6 +76,11 @@ async function ensureBoardQuestionSets(board, artists) {
 const BOARD_PACE_SECONDS = [18, 16, 14, 12];
 
 const app = express();
+// Most hosts (Railway, Render, Heroku, etc.) put the app behind a reverse
+// proxy, so without this req.ip would report the proxy's own address for
+// every visitor instead of the real client IP — which would make the
+// traffic-exclusion list below match nothing.
+app.set("trust proxy", true);
 app.use(cors());
 // Captures the exact raw bytes alongside the parsed body (req.rawBody) so
 // the SeamlessChex webhook route below can verify a signature computed over
@@ -594,11 +599,29 @@ function classifyReferrer(referrerHost) {
   return "referral";
 }
 
+// Your own visits (testing, QA, just checking the site) shouldn't count as
+// traffic — same idea as GA's "internal traffic" filter. Comma-separated
+// list of IPs to exclude, e.g. "184.93.96.142,203.0.113.7" for a home IP
+// plus a phone/office one. No effect on anything except this analytics
+// beacon — doesn't block or restrict those IPs from the site itself.
+const TRAFFIC_EXCLUDE_IPS = new Set(
+  (process.env.TRAFFIC_EXCLUDE_IPS || "").split(",").map((ip) => ip.trim()).filter(Boolean)
+);
+function getClientIp(req) {
+  // req.ip already resolves through X-Forwarded-For correctly once
+  // "trust proxy" is set, but a proxy chain can list multiple IPs
+  // (client, then each hop) — the first one is the actual visitor.
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.ip;
+}
+
 app.post("/api/track", async (req, res) => {
   try {
     // Never let a broken tracking beacon be visible to the visitor — this
     // endpoint fails silently either way.
     if (isKnownCrawler(req.headers["user-agent"])) return res.status(204).end();
+    if (TRAFFIC_EXCLUDE_IPS.has(getClientIp(req))) return res.status(204).end();
     const pagePath = String(req.body?.path || "").slice(0, 255);
     const referrer = req.body?.referrer ? String(req.body.referrer).slice(0, 500) : null;
     let referrerHost = null;
@@ -2049,6 +2072,19 @@ app.get("/api/admin/traffic", requireAdmin, async (req, res) => {
       top_pages: topPages.rows,
       top_referrers: topReferrers.rows,
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// One-time reset for when the log has been polluted by dev/QA/owner
+// traffic that predates TRAFFIC_EXCLUDE_IPS being set — there's no per-row
+// IP stored historically, so individual bad rows can't be picked out; this
+// clears everything and lets the numbers start clean from here on.
+app.delete("/api/admin/traffic", requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(`DELETE FROM page_views`);
+    res.json({ success: true, deleted: rowCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

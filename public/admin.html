@@ -314,6 +314,7 @@
             <option value="30" selected>Last 30 days</option>
             <option value="90">Last 90 days</option>
           </select>
+          <button class="btn-red btn-sm" onclick="clearTrafficLog()">Clear log</button>
         </h2>
         <div class="stat-row" id="trafficStats"></div>
       </div>
@@ -1084,6 +1085,11 @@ function deleteGlobalArtist(id, name){
 
 // ── Traffic ──
 const SOURCE_LABELS = { google: 'Google', other_search: 'Other search', social: 'Social', referral: 'Other referral', direct: 'Direct / no referrer' };
+function clearTrafficLog(){
+  if(!confirm('Delete ALL pageview data? This can\'t be undone — do this once to wipe out testing/dev traffic, then set TRAFFIC_EXCLUDE_IPS on the server so it stays clean.')) return;
+  api('/api/admin/traffic', { method:'DELETE' }).then(r=>{ toast(`Cleared ${r.deleted} pageview(s)`); loadTraffic(); }).catch(e=>toast(e.message, true));
+}
+
 function loadTraffic(){
   const days = document.getElementById('trafficDays').value || 30;
   api(`/api/admin/traffic?days=${days}`).then(d=>{
